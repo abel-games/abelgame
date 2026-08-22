@@ -21,6 +21,7 @@ var last_value: Variant = null
 ## No representa una ruta permanente.
 var context_stack: Array[Variant] = []
 
+@export var package_manager : PackageManager
 
 class TCommandCall:
 	var t_name: String
@@ -607,7 +608,7 @@ func _execute_call(t_call: TCommandCall) -> Variant:
 
 	var t_function: Callable = t_command_data["func"]
 
-	var t_result = t_function.call(
+	var t_result = await t_function.call(
 		t_call.t_args
 	)
 
@@ -635,7 +636,7 @@ func parse_command(
 	if not t_call is TCommandCall:
 		return t_call
 
-	return _execute_call(t_call)
+	return await _execute_call(t_call)
 
 
 func cmd_vget(t_args: Array) -> Variant:
@@ -960,6 +961,30 @@ func cmd_ls(args: Array) -> Variant:
 func cmd_pwd(args: Array) -> Variant:
 	return route_file_manager.execute_pwd(args)
 
+func cmd_pkg(t_args : Array) -> Variant:
+	var error : Error
+	error = Error.ERR_BUG
+	if t_args.size() < 1:
+		console_output(
+			"Parámetros insuficientes. Use pkg [OPERACIÓN] [PARAMETROS...]"
+		)
+		error = Error.ERR_PARAMETER_RANGE_ERROR
+		return error
+
+	var op: String = str(t_args[0])
+
+	match op:
+		"search":
+			if t_args.size() < 2:
+				console_output("Uso: pkg search [PAQUETE]")
+				return Error.ERR_PARAMETER_RANGE_ERROR
+
+			return await package_manager.search_package(
+				str(t_args[1])
+			)
+		_:
+			console_output("Error en match inesperado")
+			return error
 
 func cmd_at(t_args: Array) -> Variant:
 	if t_args.size() != 2:
@@ -993,7 +1018,7 @@ func cmd_at(t_args: Array) -> Variant:
 
 	_push_context(t_target)
 
-	var t_result = _execute_call(t_nested)
+	var t_result = await _execute_call(t_nested)
 
 	_pop_context()
 
@@ -1031,7 +1056,7 @@ func cmd_repeat(t_args: Array) -> Variant:
 	var t_final_result: Variant = NoResult.new()
 
 	for _t_i in range(t_amount):
-		var t_result = _execute_call(t_nested)
+		var t_result = await _execute_call(t_nested)
 
 		if not (t_result is NoResult):
 			t_final_result = t_result
@@ -1042,12 +1067,31 @@ func cmd_repeat(t_args: Array) -> Variant:
 var commands := {
 	"log": {
 		"func": cmd_log,
-		"args": 1
+		"args": 1,
+	},
+	"cd" : {
+		"func" : cmd_cd,
+		"args" : 1,
+		"raw" : [0]
+	},
+	"pwd" : {
+		"func": cmd_pwd,
+		"args": 1,
+		"raw": [0]
+	},
+	"ls" : {
+		"func" : cmd_ls,
+		"args" : 0
 	},
 	"get": {
 		"func": cmd_get,
 		"args": 2,
 		"raw": [0]
+	},
+	"pkg" : {
+		"func" : cmd_pkg,
+		"args" : -1,
+		"raw" : []
 	},
 	"set": {
 		"func": cmd_set,
@@ -1175,7 +1219,7 @@ func execute(t_command: String) -> int:
 		if t_tokens.is_empty():
 			continue
 
-		var t_result = parse_command(t_tokens)
+		var t_result = await parse_command(t_tokens)
 
 		if not (t_result is NoResult):
 			last_value = t_result

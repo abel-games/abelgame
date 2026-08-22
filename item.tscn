@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://b1h61lj0cu27q"]
 
-[ext_resource type="Script" uid="uid://vngu3eva1x1h" path="res://consumable.gd" id="1_tnite"]
-[ext_resource type="Script" uid="uid://cegfq8h60vmf4" path="res://itemdata.gd" id="2_ttk8k"]
+[ext_resource type="Script" uid="uid://vngu3eva1x1h" path="res://scripts/consumable.gd" id="1_tnite"]
+[ext_resource type="Script" uid="uid://cegfq8h60vmf4" path="res://scripts/itemdata.gd" id="2_ttk8k"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_g7b7a"]
 

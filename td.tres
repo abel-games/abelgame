@@ -1,7 +1,0 @@
-[gd_resource type="Resource" format=3 uid="uid://bps3gte0fx0wa"]
-
-[ext_resource type="Script" uid="uid://bkwlg68fowtcq" path="res://addons/zylann.hterrain/hterrain_data.gd" id="1_goebg"]
-
-[resource]
-script = ExtResource("1_goebg")
-metadata/_custom_type_script = "uid://bkwlg68fowtcq"

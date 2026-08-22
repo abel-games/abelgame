@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dnln5w1no5okq"
-path="res://.godot/imported/routefilemanager.svg-d12c0ca30e00e394bcace742d35b58e6.ctex"
+path="res://.godot/imported/routefilemanager.svg-74edb8367289a93c910cfa9553991f00.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://routefilemanager.svg"
-dest_files=["res://.godot/imported/routefilemanager.svg-d12c0ca30e00e394bcace742d35b58e6.ctex"]
+source_file="res://assets/routefilemanager.svg"
+dest_files=["res://.godot/imported/routefilemanager.svg-74edb8367289a93c910cfa9553991f00.ctex"]
 
 [params]
 

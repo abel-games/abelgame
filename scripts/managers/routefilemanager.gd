@@ -1,8 +1,9 @@
-@icon("res://routefilemanager.svg")
+@icon("res://assets/routefilemanager.svg")
 extends Node
 class_name RouteFileManager
 
 
+@export var console_manager : ConsoleManager
 @export var extensions: Array[String] = [
 	"tscn",
 	"scn",
@@ -22,7 +23,7 @@ class_name RouteFileManager
 
 ## Representación textual de la ruta actual.
 ## Puede representar un NodePath, res://, user:// o ~.
-var raw_route: String = "~"
+@onready var raw_route: String = "~"
 
 
 ## Devuelve el nodo utilizado como Home.
@@ -32,6 +33,17 @@ func get_home() -> Variant:
 
 	return self
 
+func _get_absolute_route() -> String:
+	var parts := raw_route.split("/")
+	var new_route: Array[String] = []
+
+	for part in parts:
+		if part == "~":
+			new_route.append(str(get_home().get_path()))
+		else:
+			new_route.append(part)
+
+	return "/".join(new_route)
 
 ## Resuelve y devuelve el objeto correspondiente a la ruta actual.
 func get_actual_route() -> Variant:
@@ -133,10 +145,6 @@ func execute_cd(args: Array) -> Variant:
 		var current_node: Node = current
 
 		if reference == "..":
-			if current_node == get_home():
-				raw_route = "~"
-				return get_home()
-
 			var parent := current_node.get_parent()
 
 			if parent == null:
@@ -280,15 +288,60 @@ func execute_ls(args: Array) -> Variant:
 
 
 ## Devuelve la ruta textual actual.
-func execute_pwd(_args: Array) -> Variant:
+func execute_pwd(args: Array) -> Variant:
+	@warning_ignore("unused_variable")
+	var use_raw := true
+	var use_absolute := false
+
+	if not args.is_empty():
+		var option := str(args[0]).strip_edges()
+
+		match option:
+			"-r":
+				use_raw = true
+				use_absolute = false
+
+			"-a":
+				use_raw = false
+				use_absolute = true
+
+			"-ar":
+				use_raw = false
+				use_absolute = true
+
+			"-ra":
+				use_raw = true
+				use_absolute = false
+
+			"--raw":
+				use_raw = true
+				use_absolute = false
+
+			"--absolute":
+				use_raw = false
+				use_absolute = true
+
+			_:
+				output("[ERROR] Opción desconocida: " + option)
+				return null
+
+	if use_absolute:
+		var absolute := _get_absolute_route()
+
+		if absolute == null:
+			output("[ERROR] No se pudo resolver la ruta absoluta")
+			return null
+
+		output(absolute)
+		return absolute
+
 	output(raw_route)
 	return raw_route
-
 
 ## Envía texto al canal de salida.
 ## Más adelante puede convertirse en una señal conectada a ConsoleManager.
 func output(text: String) -> void:
-	print(text)
+	console_manager.console_output(text)
 
 
 ## Resuelve una referencia sin ejecutarla ni cargarla.

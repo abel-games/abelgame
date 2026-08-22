@@ -8,8 +8,12 @@ extends Camera3D
 func _ready() -> void:
 	pass
 
+func _physics_process(_delta: float) -> void:
+	if projection == PROJECTION_ORTHOGONAL:
+		size = position.z
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag = -event.relative * sense
-		aim.rotation.x = clamp(aim.rotation.x + drag.y,-limit,limit)
-		aim2.rotate_y(drag.x)
+		aim.rotation.x = lerp_angle(aim.rotation.x, clamp(aim.rotation.x + drag.y,-limit,limit),0.5)
+		aim2.rotation.y = lerp_angle(aim2.rotation.y, aim2.rotation.y + drag.x, 0.5)

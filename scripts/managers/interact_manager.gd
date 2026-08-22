@@ -19,4 +19,4 @@ func _unhandled_input(event: InputEvent) -> void:
 			for child in collider.get_children():
 				if child is Interactable:
 					child.interact(hit)
-			#WIP(ABEL) Sistema de Integración en Desarrollo.
+			#EXPAND Puede expandir o mejorar (ABEL)

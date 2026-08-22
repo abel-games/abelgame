@@ -2,7 +2,7 @@
 
 [ext_resource type="Texture2D" uid="uid://b1lq6o08ru757" path="res://slot.png" id="1_n6cxc"]
 [ext_resource type="Texture2D" uid="uid://bvbs0cgrmksmf" path="res://slotpressed.png" id="2_0myub"]
-[ext_resource type="Script" uid="uid://corcv1q4ibtx5" path="res://item_slot.gd" id="3_i83bl"]
+[ext_resource type="Script" uid="uid://corcv1q4ibtx5" path="res://scripts/item_slot.gd" id="3_i83bl"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_g7b7a"]
 font_size = 20

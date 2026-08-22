@@ -2,6 +2,8 @@
 extends Node
 class_name PackageManager
 
+@export var console_manager : ConsoleManager
+var packages : Array[PackedPackage] = []
 
 enum PackageAction {
 	NONE,
@@ -20,11 +22,11 @@ var actual_action: PackageAction = PackageAction.NONE
 	"foo": "https://raw.githubusercontent.com/huamancabanillasabelmoises3-ctrl/abconsolefoo/main/package.json"
 }
 
+func _ready() -> void:
+	pass
 
 func output(value: Variant) -> void:
-	# Ya ahorita implemento la señal.
-	print(value)
-
+	console_manager.console_output(str(value))
 
 func get_url_package(pkg: String) -> String:
 	var url = package_url.get(pkg)
@@ -34,23 +36,68 @@ func get_url_package(pkg: String) -> String:
 
 	return str(url)
 
+func search_package(pkg : String) -> Variant:
+	var data = await _fetch_package(pkg)
+	if not data:
+		output("[ERROR] No se pudo buscar el paquete")
+		return
+	_display_package(data)
+	return data
 
-func search_package(pkg: String) -> void:
+func _fetch_package(pkg: String) -> Variant:
 	var url := get_url_package(pkg)
 
 	if url.is_empty():
-		output("Paquete no encontrado: " + pkg)
-		return
+		output("[ERROR] Package not found: " + pkg)
+		return null
 
 	var error := hr.request(url)
 
 	if error != OK:
-		actual_action = PackageAction.NONE
-		output("No se pudo conectar con el paquete: " + pkg)
-		return
+		output("[ERROR] Could not connect to package.")
+		return null
 
-	actual_action = PackageAction.SEARCH
-	output("Conexión con paquete establecida. Esperando datos...")
+	var response = await hr.request_completed
+
+	var result: int = response[0]
+	var response_code: int = response[1]
+	var body: PackedByteArray = response[3]
+
+	if result != HTTPRequest.RESULT_SUCCESS:
+		output("[ERROR] Connection error.")
+		return null
+
+	if response_code < 200 or response_code >= 300:
+		output("[ERROR] HTTP " + str(response_code))
+		return null
+
+	var data = JSON.parse_string(body.get_string_from_utf8())
+
+	if data == null or not data is Dictionary:
+		output("[ERROR] Invalid package.json.")
+		return null
+
+	return data
+
+func _display_package(data: Dictionary):
+	output("")
+	output("========== PACKAGE ==========")
+
+	if data.has("name"):
+		output("Package Name : " + str(data["name"]))
+
+	if data.has("version"):
+		output("Version      : " + str(data["version"]))
+
+	if data.has("description"):
+		output("Description  : " + str(data["description"]))
+
+	if data.has("author"):
+		output("Author       : " + str(data["author"]))
+
+	output("==============================")
+
+	return data
 
 func test_save_package() -> void:
 	var dir := "user://packages/foo"
@@ -119,8 +166,3 @@ func _handle_search_result(
 		return
 
 	output(data)
-
-
-func _ready() -> void:
-	test_save_package()
-	search_package("foo")
