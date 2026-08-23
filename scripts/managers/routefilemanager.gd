@@ -3,7 +3,7 @@ extends Node
 class_name RouteFileManager
 
 
-@export var console_manager : ConsoleManager
+@export var console_manager: ConsoleManager
 @export var extensions: Array[String] = [
 	"tscn",
 	"scn",
@@ -21,9 +21,9 @@ class_name RouteFileManager
 ## Nodo utilizado como Home (~).
 @export var home: Node
 
-## Representación textual de la ruta actual.
+## Representación lógica de la ruta actual.
 ## Puede representar un NodePath, res://, user:// o ~.
-@onready var raw_route: String = "~"
+@onready var logical_route: String = "~"
 
 
 ## Devuelve el nodo utilizado como Home.
@@ -33,21 +33,24 @@ func get_home() -> Variant:
 
 	return self
 
-func _get_absolute_route() -> String:
-	var parts := raw_route.split("/")
-	var new_route: Array[String] = []
+
+## Devuelve la representación física de la ruta actual.
+func get_physical_route() -> String:
+	var parts := logical_route.split("/")
+	var physical_parts: Array[String] = []
 
 	for part in parts:
 		if part == "~":
-			new_route.append(str(get_home().get_path()))
+			physical_parts.append(str(get_home().get_path()))
 		else:
-			new_route.append(part)
+			physical_parts.append(part)
 
-	return "/".join(new_route)
+	return "/".join(physical_parts)
 
-## Resuelve y devuelve el objeto correspondiente a la ruta actual.
+
+## Devuelve el objeto correspondiente a la ruta actual.
 func get_actual_route() -> Variant:
-	return resolve_route(raw_route, get_home())
+	return resolve_route(logical_route, get_home())
 
 
 ## Carga un archivo, recurso o nodo a partir de una ruta.
@@ -135,7 +138,7 @@ func execute_cd(args: Array) -> Variant:
 
 	# Volver al Home.
 	if reference == "~":
-		raw_route = "~"
+		logical_route = "~"
 		return get_home()
 
 	var current = get_actual_route()
@@ -151,16 +154,16 @@ func execute_cd(args: Array) -> Variant:
 				return current_node
 
 			if parent == get_home():
-				raw_route = "~"
+				logical_route = "~"
 			else:
-				raw_route = str(parent.get_path())
+				logical_route = str(parent.get_path())
 
 			return parent
 
 		var target: Node = current_node.get_node_or_null(reference)
 
 		if target != null:
-			raw_route = str(target.get_path())
+			logical_route = str(target.get_path())
 			return target
 
 	# Navegación para filesystem.
@@ -183,7 +186,7 @@ func execute_cd(args: Array) -> Variant:
 			):
 				parent_path = "user://"
 
-			raw_route = parent_path
+			logical_route = parent_path
 			return parent_path
 
 		var filesystem_target := current_path.path_join(reference)
@@ -191,7 +194,7 @@ func execute_cd(args: Array) -> Variant:
 
 		if _is_filesystem_path(filesystem_target):
 			if DirAccess.dir_exists_absolute(filesystem_target):
-				raw_route = filesystem_target
+				logical_route = filesystem_target
 				return filesystem_target
 
 			output(
@@ -209,7 +212,7 @@ func execute_cd(args: Array) -> Variant:
 
 	# cd solo acepta destinos navegables.
 	if resolved is Node:
-		raw_route = str(resolved.get_path())
+		logical_route = str(resolved.get_path())
 		return resolved
 
 	if resolved is String:
@@ -217,7 +220,7 @@ func execute_cd(args: Array) -> Variant:
 			output("[ERROR] No es un directorio: " + reference)
 			return null
 
-		raw_route = resolved
+		logical_route = resolved
 		return resolved
 
 	output("[ERROR] La referencia no es navegable")
@@ -288,55 +291,40 @@ func execute_ls(args: Array) -> Variant:
 
 
 ## Devuelve la ruta textual actual.
+##
+## Opciones:
+## -L, --logical  → devuelve la ruta lógica. Es la opción por defecto.
+## -P, --physical → devuelve la ruta física.
 func execute_pwd(args: Array) -> Variant:
-	@warning_ignore("unused_variable")
-	var use_raw := true
-	var use_absolute := false
+	var use_physical := false
 
 	if not args.is_empty():
 		var option := str(args[0]).strip_edges()
 
 		match option:
-			"-r":
-				use_raw = true
-				use_absolute = false
+			"-L", "--logical":
+				use_physical = false
 
-			"-a":
-				use_raw = false
-				use_absolute = true
-
-			"-ar":
-				use_raw = false
-				use_absolute = true
-
-			"-ra":
-				use_raw = true
-				use_absolute = false
-
-			"--raw":
-				use_raw = true
-				use_absolute = false
-
-			"--absolute":
-				use_raw = false
-				use_absolute = true
+			"-P", "--physical":
+				use_physical = true
 
 			_:
 				output("[ERROR] Opción desconocida: " + option)
 				return null
 
-	if use_absolute:
-		var absolute := _get_absolute_route()
+	if use_physical:
+		var physical_route := get_physical_route()
 
-		if absolute == null:
-			output("[ERROR] No se pudo resolver la ruta absoluta")
+		if physical_route.is_empty():
+			output("[ERROR] No se pudo resolver la ruta física")
 			return null
 
-		output(absolute)
-		return absolute
+		output(physical_route)
+		return physical_route
 
-	output(raw_route)
-	return raw_route
+	output(logical_route)
+	return logical_route
+
 
 ## Envía texto al canal de salida.
 ## Más adelante puede convertirse en una señal conectada a ConsoleManager.
@@ -350,24 +338,24 @@ func resolve_route(
 	reference: String,
 	fallback: Variant = null
 ) -> Variant:
-	var r := reference.strip_edges()
+	var route := reference.strip_edges()
 
-	if r.is_empty():
+	if route.is_empty():
 		return fallback
 
 	# Home.
-	if r == "~":
+	if route == "~":
 		return get_home()
 
 	# Intentar resolver un NodePath.
-	var node := get_node_or_null(NodePath(r))
+	var node := get_node_or_null(NodePath(route))
 
 	if node != null:
 		return node
 
 	# Intentar resolver un archivo o directorio.
-	if _is_filesystem_path(r):
-		return r
+	if _is_filesystem_path(route):
+		return route
 
 	return fallback
 

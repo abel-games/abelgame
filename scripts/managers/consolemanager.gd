@@ -2,26 +2,33 @@
 extends Node
 class_name ConsoleManager
 
+
 ## Clase para gestionar una consola con comandos y control del motor.
 ## Se recomienda usar execute() y conectar output para obtener resultados.
 signal output(out: String)
+
 
 ## RouteFileManager encargado de resolver rutas externas a ConsoleManager.
 ## Debe exponer una función resolve_reference(text: String) -> Variant.
 @export var route_file_manager: RouteFileManager
 
+
 ## Variables internas de la consola.
 @export var variables: Dictionary = {}
+
 
 ## Último resultado válido producido por un comando.
 ## Se puede utilizar mediante @.
 var last_value: Variant = null
 
+
 ## Contexto temporal utilizado por `at`.
 ## No representa una ruta permanente.
 var context_stack: Array[Variant] = []
 
-@export var package_manager : PackageManager
+
+@export var package_manager: PackageManager
+
 
 class TCommandCall:
 	var t_name: String
@@ -54,8 +61,45 @@ class ConsoleContext:
 		t_variables = _t_variables
 
 
-func console_output(t_value: Variant) -> void:
-	output.emit(str(t_value))
+enum OutputType {
+	LOG,
+	DEBUG,
+	WARNING,
+	ERROR,
+	FATAL
+}
+
+
+func console_output(
+	t_value: Variant,
+	type: OutputType = OutputType.LOG
+) -> void:
+	var message := str(t_value)
+
+	var color := Color.WHITE
+
+	match type:
+		OutputType.DEBUG:
+			color = Color("#CCCCCC")
+
+		OutputType.WARNING:
+			color = Color("#FFEE00")
+
+		OutputType.ERROR:
+			color = Color("#EE0000")
+
+		OutputType.FATAL:
+			color = Color("#FF00FF")
+
+		OutputType.LOG:
+			color = Color.WHITE
+
+	var formatted := "[color=%s]%s[/color]" % [
+		color.to_html(),
+		message
+	]
+
+	output.emit(formatted)
 
 
 func _current_context() -> Variant:
@@ -232,6 +276,7 @@ func _resolve_property_parent(
 		"t_leaf": t_parts[t_parts.size() - 1].strip_edges()
 	}
 
+
 func _resolve_reference(t_text: String) -> Variant:
 	t_text = _strip_surrounding_quotes(t_text)
 
@@ -244,8 +289,6 @@ func _resolve_reference(t_text: String) -> Variant:
 	if t_text == "@":
 		return last_value
 
-	# RouteFileManager se encarga de /root, res://, user://,
-	# rutas relativas y cualquier otra ruta externa a la consola.
 	if route_file_manager != null:
 		if route_file_manager.has_method("resolve_reference"):
 			var t_resolved = route_file_manager.call(
@@ -265,7 +308,6 @@ func _resolve_reference(t_text: String) -> Variant:
 			if t_resolved != null:
 				return t_resolved
 
-	# Si contiene ":" todavía puede ser una subruta de un contexto.
 	if t_text.find(":") != -1:
 		var t_chained = _resolve_property_chain(
 			_current_context(),
@@ -442,8 +484,9 @@ func _parse_argument(
 
 
 func _ready() -> void:
-	var tree : SceneTree = get_tree()
+	var tree: SceneTree = get_tree()
 	variables["tree"] = tree
+
 
 func _parse_command_call(
 	t_tokens: PackedStringArray,
@@ -470,7 +513,6 @@ func _parse_command_call(
 
 	var t_call := TCommandCall.new(t_token)
 
-	# `at <reference> <command...>`
 	if t_token == "at":
 		if t_index + 2 >= t_end:
 			return {
@@ -504,7 +546,6 @@ func _parse_command_call(
 			"next_index": t_nested["next_index"]
 		}
 
-	# `repeat <amount> <command...>`
 	if t_token == "repeat":
 		if t_index + 2 >= t_end:
 			return {
@@ -538,7 +579,6 @@ func _parse_command_call(
 			"next_index": t_nested_repeat["next_index"]
 		}
 
-	# Comandos con argumentos variables.
 	if t_amount == -1:
 		for t_argument_index in range(
 			t_index + 1,
@@ -564,7 +604,6 @@ func _parse_command_call(
 			"next_index": t_end
 		}
 
-	# Comandos con cantidad fija de argumentos.
 	var t_current_index := t_index + 1
 
 	for t_argument_index in range(t_amount):
@@ -642,7 +681,8 @@ func parse_command(
 func cmd_vget(t_args: Array) -> Variant:
 	if t_args.size() != 1:
 		console_output(
-			"[ERROR] Uso: vget [name]"
+			"Uso: vget [name]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -650,8 +690,8 @@ func cmd_vget(t_args: Array) -> Variant:
 
 	if not variables.has(t_name):
 		console_output(
-			"[ERROR] Variable no encontrada: "
-			+ t_name
+			"Variable no encontrada: " + t_name,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -661,7 +701,8 @@ func cmd_vget(t_args: Array) -> Variant:
 func cmd_vset(t_args: Array) -> Variant:
 	if t_args.size() != 2:
 		console_output(
-			"[ERROR] Uso: vset [name] [value]"
+			"Uso: vset [name] [value]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -675,7 +716,10 @@ func cmd_vset(t_args: Array) -> Variant:
 
 func cmd_log(t_args: Array) -> Variant:
 	if not t_args.is_empty():
-		console_output(t_args[0])
+		console_output(
+			t_args[0],
+			OutputType.LOG
+		)
 
 	return NoResult.new()
 
@@ -683,11 +727,13 @@ func cmd_log(t_args: Array) -> Variant:
 func cmd_new(t_args: Array) -> Variant:
 	if t_args.is_empty():
 		console_output(
-			"[ERROR] Uso: new [expression]"
+			"Uso: new [expression]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	var t_expression := " ".join(t_args)
+
 	var t_result = evaluate_raw_expression(
 		t_expression
 	)
@@ -700,16 +746,17 @@ func cmd_new(t_args: Array) -> Variant:
 	if ClassDB.class_exists(t_type_name):
 		if not ClassDB.can_instantiate(t_type_name):
 			console_output(
-				"[ERROR] La clase no puede ser instanciada: "
-				+ t_type_name
+				"La clase no puede ser instanciada: "
+				+ t_type_name,
+				OutputType.ERROR
 			)
 			return NoResult.new()
 
 		return ClassDB.instantiate(t_type_name)
 
 	console_output(
-		"[ERROR] No se pudo crear: "
-		+ t_expression
+		"No se pudo crear: " + t_expression,
+		OutputType.ERROR
 	)
 
 	return NoResult.new()
@@ -731,13 +778,15 @@ func cmd_get(t_args: Array) -> Variant:
 
 	else:
 		console_output(
-			"[ERROR] Uso: get [route] [value]"
+			"Uso: get [route] [value]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	if t_target == null or t_target is NoResult:
 		console_output(
-			"[ERROR] Referencia inválida"
+			"Referencia inválida",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -748,8 +797,8 @@ func cmd_get(t_args: Array) -> Variant:
 
 	if t_result is NoResult:
 		console_output(
-			"[ERROR] Propiedad no encontrada: "
-			+ t_property
+			"Propiedad no encontrada: " + t_property,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -775,13 +824,15 @@ func cmd_set(t_args: Array) -> Variant:
 
 	else:
 		console_output(
-			"[ERROR] Uso: set [route] [value] [data]"
+			"Uso: set [route] [value] [data]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	if t_target == null or t_target is NoResult:
 		console_output(
-			"[ERROR] Referencia inválida"
+			"Referencia inválida",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -792,8 +843,8 @@ func cmd_set(t_args: Array) -> Variant:
 
 	if t_endpoint.has("t_error"):
 		console_output(
-			"[ERROR] Propiedad no encontrada: "
-			+ t_property
+			"Propiedad no encontrada: " + t_property,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -806,8 +857,8 @@ func cmd_set(t_args: Array) -> Variant:
 		t_value
 	):
 		console_output(
-			"[ERROR] No se pudo asignar: "
-			+ t_property
+			"No se pudo asignar: " + t_property,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -817,7 +868,8 @@ func cmd_set(t_args: Array) -> Variant:
 func cmd_call(t_args: Array) -> Variant:
 	if t_args.is_empty():
 		console_output(
-			"[ERROR] Uso: call [route] [method] [parameters]"
+			"Uso: call [route] [method] [parameters]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -849,7 +901,8 @@ func cmd_call(t_args: Array) -> Variant:
 		or not t_target is Object
 	):
 		console_output(
-			"[ERROR] Referencia inválida"
+			"Referencia inválida",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -859,8 +912,8 @@ func cmd_call(t_args: Array) -> Variant:
 
 	if not t_target.has_method(t_method):
 		console_output(
-			"[ERROR] Método no encontrado: "
-			+ t_method
+			"Método no encontrado: " + t_method,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -883,7 +936,8 @@ func cmd_call(t_args: Array) -> Variant:
 func cmd_emit(t_args: Array) -> Variant:
 	if t_args.is_empty():
 		console_output(
-			"[ERROR] Uso: emit [route] [signal] [parameters]"
+			"Uso: emit [route] [signal] [parameters]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -915,7 +969,8 @@ func cmd_emit(t_args: Array) -> Variant:
 		or not t_target is Object
 	):
 		console_output(
-			"[ERROR] Referencia inválida"
+			"Referencia inválida",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -925,8 +980,8 @@ func cmd_emit(t_args: Array) -> Variant:
 
 	if not t_target.has_signal(t_signal_name):
 		console_output(
-			"[ERROR] Señal no encontrada: "
-			+ t_signal_name
+			"Señal no encontrada: " + t_signal_name,
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -947,8 +1002,10 @@ func cmd_emit(t_args: Array) -> Variant:
 
 	return NoResult.new()
 
-func cmd_load(t_args : Array) -> Variant:
+
+func cmd_load(t_args: Array) -> Variant:
 	return route_file_manager.execute_load(t_args)
+
 
 func cmd_cd(args: Array) -> Variant:
 	return route_file_manager.execute_cd(args)
@@ -961,13 +1018,16 @@ func cmd_ls(args: Array) -> Variant:
 func cmd_pwd(args: Array) -> Variant:
 	return route_file_manager.execute_pwd(args)
 
-func cmd_pkg(t_args : Array) -> Variant:
-	var error : Error
-	error = Error.ERR_BUG
+
+func cmd_pkg(t_args: Array) -> Variant:
+	var error: Error = Error.ERR_BUG
+
 	if t_args.size() < 1:
 		console_output(
-			"Parámetros insuficientes. Use pkg [OPERACIÓN] [PARAMETROS...]"
+			"Parámetros insuficientes. Use pkg [OPERACIÓN] [PARAMETROS...]",
+			OutputType.ERROR
 		)
+
 		error = Error.ERR_PARAMETER_RANGE_ERROR
 		return error
 
@@ -976,20 +1036,30 @@ func cmd_pkg(t_args : Array) -> Variant:
 	match op:
 		"search":
 			if t_args.size() < 2:
-				console_output("Uso: pkg search [PAQUETE]")
+				console_output(
+					"Uso: pkg search [PAQUETE]",
+					OutputType.ERROR
+				)
 				return Error.ERR_PARAMETER_RANGE_ERROR
 
 			return await package_manager.search_package(
 				str(t_args[1])
 			)
+
 		_:
-			console_output("Error en match inesperado")
+			console_output(
+				"Operación de paquete desconocida: " + op,
+				OutputType.ERROR
+			)
+
 			return error
+
 
 func cmd_at(t_args: Array) -> Variant:
 	if t_args.size() != 2:
 		console_output(
-			"[ERROR] Uso: at [reference] [command]"
+			"Uso: at [reference] [command]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -997,22 +1067,22 @@ func cmd_at(t_args: Array) -> Variant:
 	var t_nested = t_args[1]
 
 	if t_target is String:
-		t_target = _resolve_reference(
-			t_target
-		)
+		t_target = _resolve_reference(t_target)
 
 	if (
 		t_target == null
 		or t_target is NoResult
 	):
 		console_output(
-			"[ERROR] Referencia inválida"
+			"Referencia inválida",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	if not t_nested is TCommandCall:
 		console_output(
-			"[ERROR] Se esperaba un comando"
+			"Se esperaba un comando",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -1028,7 +1098,8 @@ func cmd_at(t_args: Array) -> Variant:
 func cmd_repeat(t_args: Array) -> Variant:
 	if t_args.size() != 2:
 		console_output(
-			"[ERROR] Uso: repeat [amount] [command]"
+			"Uso: repeat [amount] [command]",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -1037,19 +1108,22 @@ func cmd_repeat(t_args: Array) -> Variant:
 
 	if not t_amount is int:
 		console_output(
-			"[ERROR] La cantidad debe ser un entero"
+			"La cantidad debe ser un entero",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	if t_amount < 0:
 		console_output(
-			"[ERROR] La cantidad no puede ser negativa"
+			"La cantidad no puede ser negativa",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	if not t_nested is TCommandCall:
 		console_output(
-			"[ERROR] Se esperaba un comando"
+			"Se esperaba un comando",
+			OutputType.ERROR
 		)
 		return NoResult.new()
 
@@ -1063,6 +1137,10 @@ func cmd_repeat(t_args: Array) -> Variant:
 
 	return t_final_result
 
+
+# ---------------------------------------------------------
+# TU DICCIONARIO `commands` VA AQUÍ SIN CAMBIARLO.
+# ---------------------------------------------------------
 
 var commands := {
 	"log": {

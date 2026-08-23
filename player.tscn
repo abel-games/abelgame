@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://tt2rfoj3yyto" path="res://scripts/soul.gd" id="1_i3pqv"]
 [ext_resource type="Texture2D" uid="uid://de38kw3i5250m" path="res://Heart.svg" id="2_hqtel"]
 [ext_resource type="Script" uid="uid://crptch242eww2" path="res://state_machine.gd" id="3_sweqy"]
+[ext_resource type="Script" uid="uid://duisbh76tof3t" path="res://scripts/state.gd" id="4_hqtel"]
+[ext_resource type="Script" uid="uid://05q6mp1fv3cq" path="res://idle.gd" id="4_sweqy"]
 
 [sub_resource type="Shader" id="Shader_82xsv"]
 code = "// NOTE: Shader automatically converted from Godot Engine 4.7.1.stable's StandardMaterial3D.
@@ -76,7 +78,7 @@ void fragment() {
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_getpj"]
 render_priority = 0
 shader = SubResource("Shader_82xsv")
-shader_parameter/a = 1.0
+shader_parameter/a = 0.0
 shader_parameter/force_visible = false
 shader_parameter/albedo = Color(1, 1, 1, 1)
 shader_parameter/texture_albedo = ExtResource("2_hqtel")
@@ -104,8 +106,17 @@ transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 0, 0, 0)
 cast_shadow = 0
 mesh = SubResource("QuadMesh_g7b7a")
 
-[node name="StateMachine" type="Node" parent="." unique_id=23415351]
+[node name="StateMachine" type="Node" parent="." unique_id=23415351 node_paths=PackedStringArray("actual")]
 script = ExtResource("3_sweqy")
+actual = NodePath("Idle")
+
+[node name="Idle" type="Node" parent="StateMachine" unique_id=1819886525]
+script = ExtResource("4_sweqy")
+metadata/_custom_type_script = "uid://duisbh76tof3t"
+
+[node name="Walk" type="Node" parent="StateMachine" unique_id=2123978571]
+script = ExtResource("4_hqtel")
+metadata/_custom_type_script = "uid://duisbh76tof3t"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=830082620]
 shape = SubResource("SphereShape3D_g7b7a")
