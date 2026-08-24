@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://d0b3sg81v1v2f"]
+
+[ext_resource type="Script" uid="uid://ta4a80tkifk0" path="res://city_gen.gd" id="1_c88kf"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_g7b7a"]
+
+[node name="ciudad" type="StaticBody3D" unique_id=453805758]
+transform = Transform3D(4, 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="." unique_id=919782076]
+transform = Transform3D(100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0)
+mesh = SubResource("ArrayMesh_g7b7a")
+script = ExtResource("1_c88kf")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=630760542]
+transform = Transform3D(-0.2499009, 0, -0.007037923, -0.0069965213, 0.027077282, 0.24843082, 0.00076227135, 0.2485293, -0.02706655, 0, 1.3194897, 0)

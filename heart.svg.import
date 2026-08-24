@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://de38kw3i5250m"
-path.etc2="res://.godot/imported/Heart.svg-52fa47222c53341d2b783580e360b6f5.etc2.ctex"
+path.etc2="res://.godot/imported/heart.svg-ab0efdc9038cc62c263f452bf830d96e.etc2.ctex"
 metadata={
 "imported_formats": ["etc2_astc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://Heart.svg"
-dest_files=["res://.godot/imported/Heart.svg-52fa47222c53341d2b783580e360b6f5.etc2.ctex"]
+source_file="res://heart.svg"
+dest_files=["res://.godot/imported/heart.svg-ab0efdc9038cc62c263f452bf830d96e.etc2.ctex"]
 
 [params]
 

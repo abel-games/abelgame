@@ -11,6 +11,8 @@ func _ready() -> void:
 		var child_name : String = child.name
 		if child is FSMState:
 			states[child_name] = child
+			child.fsm = self
+			child.controlled = owner
 
 func _process(delta: float) -> void:
 	actual.process(delta)

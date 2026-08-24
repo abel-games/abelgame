@@ -15,7 +15,7 @@ var soul_mesh : MeshInstance3D
 @onready var aim: Node3D = $"../Aim"
 @export var mode: SoulMode = SoulMode.NORMAL
 
-var SPEED := 8.0
+var speed := 160.0
 var JUMP_VELOCITY := 12.0
 const MASS := 2.0
 var ROTATION_SPEED := 0.1
