@@ -1,4 +1,4 @@
-@icon("res://assets/routefilemanager.svg")
+@icon("res://assets/icon/routefilemanager.svg")
 extends Node
 class_name RouteFileManager
 

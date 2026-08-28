@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dasoq4xgfndk3"
-path="res://.godot/imported/background_soul.png-8df1d9af564d6f2f79480066f390a819.ctex"
+uid="uid://b5tmx3yy4t2ad"
+path="res://.godot/imported/consolemanager.svg-0cef8889a451ef8a6acbbdf96272e150.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://background_soul.png"
-dest_files=["res://.godot/imported/background_soul.png-8df1d9af564d6f2f79480066f390a819.ctex"]
+source_file="res://assets/icon/consolemanager.svg"
+dest_files=["res://.godot/imported/consolemanager.svg-0cef8889a451ef8a6acbbdf96272e150.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -37,4 +37,7 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dsa0lmtxwj4tw"
-path="res://.godot/imported/interactmanager.svg-7711296f676fab0597d91c15d4d29436.ctex"
+uid="uid://bvbs0cgrmksmf"
+path="res://.godot/imported/slotpressed.png-a162d819bb997fd48b2bd0a7b59f9970.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://interactmanager.svg"
-dest_files=["res://.godot/imported/interactmanager.svg-7711296f676fab0597d91c15d4d29436.ctex"]
+source_file="res://assets/slotpressed.png"
+dest_files=["res://.godot/imported/slotpressed.png-a162d819bb997fd48b2bd0a7b59f9970.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

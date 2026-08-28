@@ -15,7 +15,7 @@ var soul_mesh : MeshInstance3D
 @onready var aim: Node3D = $"../Aim"
 @export var mode: SoulMode = SoulMode.NORMAL
 
-var speed := 160.0
+var speed := 4.0
 var JUMP_VELOCITY := 12.0
 const MASS := 2.0
 var ROTATION_SPEED := 0.1
@@ -25,11 +25,7 @@ var old_mode: int = SoulMode.NORMAL
 func _ready() -> void:
 	soul_mesh = soul.get_child(0)
 
-func _state_machine_do() -> void:
-	pass
-
 func _physics_process(_delta: float) -> void:
-	_state_machine_do()
 	_display(old_mode,mode)
 	move_and_slide()
 	old_mode = mode

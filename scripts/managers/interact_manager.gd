@@ -1,4 +1,4 @@
-@icon("res://interactmanager.svg")
+@icon("res://assets/icon/interactmanager.svg")
 extends Node
 class_name InteractManager
 

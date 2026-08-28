@@ -10,16 +10,17 @@
 [ext_resource type="Shader" uid="uid://blncrr0pljrv2" path="res://shaders/li.gdshader" id="3_efxa6"]
 [ext_resource type="Script" uid="uid://cxiadd6td5xjy" path="res://scripts/managers/packagemanager.gd" id="3_seu75"]
 [ext_resource type="Script" uid="uid://ckavp7nf0ljbx" path="res://scripts/button.gd" id="4_1bvp3"]
-[ext_resource type="Texture2D" uid="uid://sk4u0das5ng3" path="res://brickwall.jpg" id="4_4c57u"]
+[ext_resource type="Texture2D" uid="uid://sk4u0das5ng3" path="res://assets/brickwall.jpg" id="4_4c57u"]
 [ext_resource type="Script" uid="uid://dxppa7g5tgukh" path="res://scripts/managers/routefilemanager.gd" id="4_4k2k6"]
 [ext_resource type="Shader" uid="uid://dphseupgowu13" path="res://shaders/other.gdshader" id="4_82xsv"]
 [ext_resource type="Script" uid="uid://crd113gs834v4" path="res://scripts/inventory.gd" id="7_5vw27"]
-[ext_resource type="PackedScene" uid="uid://tcoelb75l1h4" path="res://item_slot.tscn" id="7_272bh"]
+[ext_resource type="PackedScene" uid="uid://tcoelb75l1h4" path="res://scene/item_slot.tscn" id="7_272bh"]
+[ext_resource type="Texture2D" uid="uid://dasoq4xgfndk3" path="res://assets/background_soul.png" id="9_bmc2w"]
 [ext_resource type="Script" uid="uid://ebc8tiphesn0" path="res://scripts/lightorf.gd" id="9_dg77c"]
-[ext_resource type="PackedScene" uid="uid://d2rc35q2vkytm" path="res://player.tscn" id="9_jq2sk"]
-[ext_resource type="Texture2D" uid="uid://djrupg8gsy1t7" path="res://grass.jpg" id="9_ycdy4"]
+[ext_resource type="PackedScene" uid="uid://d2rc35q2vkytm" path="res://scene/player.tscn" id="9_jq2sk"]
+[ext_resource type="Texture2D" uid="uid://djrupg8gsy1t7" path="res://assets/grass.jpg" id="9_ycdy4"]
 [ext_resource type="Shader" uid="uid://cg3rvgvrysr46" path="res://shaders/fire.gdshader" id="10_w48qg"]
-[ext_resource type="Texture2D" uid="uid://cfrhqxpgn3u2n" path="res://fire.png" id="11_vivmo"]
+[ext_resource type="Texture2D" uid="uid://cfrhqxpgn3u2n" path="res://assets/fire.png" id="11_vivmo"]
 [ext_resource type="Script" uid="uid://ce7pimjpcoq5p" path="res://scripts/cube_i.gd" id="11_yaehf"]
 [ext_resource type="Texture2D" uid="uid://cknak682lrwcl" path="res://icon.svg" id="14_xuqvo"]
 [ext_resource type="Script" uid="uid://dx0xlyd7u17oa" path="res://scripts/mode.gd" id="18_82xsv"]
@@ -54,16 +55,13 @@ shader = ExtResource("2_4c57u")
 shader_parameter/weight = 0.05
 shader_parameter/outline_color = Vector3(0, 0, 0)
 
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_cegan"]
-load_path = "res://.godot/imported/background_soul.png-8df1d9af564d6f2f79480066f390a819.ctex"
-
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_82xsv"]
 resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("4_82xsv")
 shader_parameter/shader_lerp = 0.0
 shader_parameter/light_mode = 0.0
-shader_parameter/ax = SubResource("CompressedTexture2D_cegan")
+shader_parameter/ax = ExtResource("9_bmc2w")
 shader_parameter/uv_scale = Vector2(4, 4)
 shader_parameter/albedo = Color(0.90833163, 0, 0, 1)
 shader_parameter/smstep = 0.5
@@ -82,16 +80,13 @@ shader = ExtResource("2_4c57u")
 shader_parameter/weight = 0.05
 shader_parameter/outline_color = Vector3(0, 0, 0)
 
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_getpj"]
-load_path = "res://.godot/imported/background_soul.png-8df1d9af564d6f2f79480066f390a819.ctex"
-
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_ryguw"]
 resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("4_82xsv")
 shader_parameter/shader_lerp = 0.0
 shader_parameter/light_mode = 0.0
-shader_parameter/ax = SubResource("CompressedTexture2D_getpj")
+shader_parameter/ax = ExtResource("9_bmc2w")
 shader_parameter/uv_scale = Vector2(4, 4)
 shader_parameter/albedo = Color(0, 0.7273974, 0.9704087, 1)
 shader_parameter/smstep = 0.5
@@ -243,23 +238,23 @@ size = Vector3(2, 6, 2)
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_gyc6d"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_bpo87"]
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jey2d"]
 render_priority = 0
 shader = ExtResource("3_efxa6")
 shader_parameter/smstep = 0.5
-shader_parameter/stepv = 0.2999999932944
-shader_parameter/albedo = Color(1, 0.94195384, 0, 1)
+shader_parameter/stepv = 0.25
+shader_parameter/albedo = Color(1, 0.8666667, 0, 1)
 shader_parameter/max_l = 1.0
 shader_parameter/normal_multiplier = 0.0
 shader_parameter/uv1_scale = Vector3(1, 1, 1)
 shader_parameter/uv1_offset = Vector3(0, 0, 0)
 
-[sub_resource type="BoxMesh" id="BoxMesh_xrv66"]
-material = SubResource("ShaderMaterial_bpo87")
-size = Vector3(1, 0.5, 0.333)
+[sub_resource type="BoxMesh" id="BoxMesh_216wm"]
+material = SubResource("ShaderMaterial_jey2d")
+size = Vector3(1.25, 0.75, 0.5)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_hqkgv"]
-size = Vector3(1, 0.5, 0.333)
+[sub_resource type="BoxShape3D" id="BoxShape3D_kpobt"]
+size = Vector3(1.25, 0.75, 0.5)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_gyc6d"]
 size = Vector3(4, 4, 0.01)
@@ -496,10 +491,10 @@ max_distance = 6.0
 bus = &"Radio"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="World3D/Radio" unique_id=1667835126]
-mesh = SubResource("BoxMesh_xrv66")
+mesh = SubResource("BoxMesh_216wm")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Radio" unique_id=1840719486]
-shape = SubResource("BoxShape3D_hqkgv")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Radio" unique_id=104040661]
+shape = SubResource("BoxShape3D_kpobt")
 
 [node name="Mirror3D" parent="World3D" unique_id=916837440 instance=ExtResource("20_kq58d")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3596022, 3.013221, -5.1231394)
@@ -547,6 +542,7 @@ offset_bottom = 48.0
 grow_vertical = 2
 scale = Vector2(4, 4)
 joystick_mode = 1
+deadzone_ratio = 0.01
 action_left = &"gm_left"
 action_right = &"gm_right"
 action_up = &"gm_up"

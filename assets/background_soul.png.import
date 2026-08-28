@@ -2,21 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cp0neeg4tclcc"
-path.etc2="res://.godot/imported/grass2.jpg-2975b05727d7e1a7f92ff0e973919259.etc2.ctex"
+uid="uid://dasoq4xgfndk3"
+path="res://.godot/imported/background_soul.png-0f90228bc0900117a2808c24105947d8.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://grass2.jpg"
-dest_files=["res://.godot/imported/grass2.jpg-2975b05727d7e1a7f92ff0e973919259.etc2.ctex"]
+source_file="res://assets/background_soul.png"
+dest_files=["res://.godot/imported/background_soul.png-0f90228bc0900117a2808c24105947d8.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

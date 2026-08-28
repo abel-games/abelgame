@@ -2,21 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cfrhqxpgn3u2n"
-path.etc2="res://.godot/imported/fire.png-83593c661c3053fd2ba2e0e49b9ada8c.etc2.ctex"
+uid="uid://dnln5w1no5okq"
+path="res://.godot/imported/routefilemanager.svg-1cccea52926725e7a44895b5da29c771.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://fire.png"
-dest_files=["res://.godot/imported/fire.png-83593c661c3053fd2ba2e0e49b9ada8c.etc2.ctex"]
+source_file="res://assets/icon/routefilemanager.svg"
+dest_files=["res://.godot/imported/routefilemanager.svg-1cccea52926725e7a44895b5da29c771.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -24,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,4 +37,7 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

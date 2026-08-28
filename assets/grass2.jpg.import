@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sk4u0das5ng3"
-path.etc2="res://.godot/imported/brickwall.jpg-7338307567656928807d9e24fd9d8cfd.etc2.ctex"
+uid="uid://cp0neeg4tclcc"
+path.etc2="res://.godot/imported/grass2.jpg-77f3ed03f6d47d340587bf9c54a06b02.etc2.ctex"
 metadata={
 "imported_formats": ["etc2_astc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://brickwall.jpg"
-dest_files=["res://.godot/imported/brickwall.jpg-7338307567656928807d9e24fd9d8cfd.etc2.ctex"]
+source_file="res://assets/grass2.jpg"
+dest_files=["res://.godot/imported/grass2.jpg-77f3ed03f6d47d340587bf9c54a06b02.etc2.ctex"]
 
 [params]
 
@@ -22,12 +22,12 @@ compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=1
+compress/normal_map=0
 compress/channel_pack=0
 mipmaps/generate=true
-mipmaps/limit=7
-roughness/mode=1
-roughness/src_normal="res://brickwall.jpg"
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
 process/channel_remap/red=0
 process/channel_remap/green=1
 process/channel_remap/blue=2

@@ -9,7 +9,8 @@ class_name Soul
 @export var gravity: float = 9.8
 
 @onready var material: ShaderMaterial = mesh.get_active_material(0)
-var speed := 80.0
+var speed := 0.04
+var rotation_speed := 8.0
 
 func _physics_process(delta: float) -> void:
 	if controlled and controlled != self:
@@ -22,8 +23,12 @@ func _controlled_mode() -> void:
 	#Transferir velocidad
 	speed = controlled.speed
 	
-	# Transferir movimiento
-	controlled.velocity = velocity
+	# Transferir movimiento xz
+	controlled.velocity.x = velocity.x
+	controlled.velocity.z = velocity.z
+	
+	#Gravedad
+	controlled.velocity += get_gravity()
 	
 	# Transferir rotación
 	controlled.rotation = rotation

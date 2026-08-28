@@ -1,4 +1,4 @@
-@icon("res://packagemanager.svg")
+@icon("res://assets/icon/packagemanager.svg")
 extends Node
 class_name PackageManager
 
@@ -125,18 +125,6 @@ func test_save_package() -> void:
 
 	output("Paquete guardado correctamente en: " + dir)
 
-func _on_hr_request_completed(
-	result: int,
-	response_code: int,
-	_headers: PackedStringArray,
-	body: PackedByteArray
-) -> void:
-	if actual_action == PackageAction.NONE:
-		return
-
-	if actual_action == PackageAction.SEARCH:
-		_handle_search_result(result, response_code, body)
-		return
 
 
 func _handle_search_result(
