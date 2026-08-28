@@ -1,4 +1,4 @@
-@icon("res://consolemanager.svg")
+@icon("res://assets/icon/consolemanager.svg")
 extends Node
 class_name ConsoleManager
 
@@ -220,7 +220,6 @@ func _set_member(
 
 	return false
 
-
 func _resolve_property_chain(
 	t_base: Variant,
 	t_chain: String
@@ -237,6 +236,10 @@ func _resolve_property_chain(
 			t_current = last_value
 			continue
 
+		if t_part == "self":
+			t_current = t_base
+			continue
+
 		t_current = _get_member(t_current, t_part)
 
 		if t_current is NoResult:
@@ -244,12 +247,11 @@ func _resolve_property_chain(
 
 	return t_current
 
-
 func _resolve_property_parent(
 	t_base: Variant,
 	t_chain: String
 ) -> Dictionary:
-	var t_parts := t_chain.split(".")
+	var t_parts := t_chain.split(":")
 
 	if t_parts.is_empty():
 		return {"t_error": true}
@@ -264,6 +266,10 @@ func _resolve_property_parent(
 
 		if t_part == "@":
 			t_current = last_value
+			continue
+
+		if t_part == "self":
+			t_current = t_base
 			continue
 
 		t_current = _get_member(t_current, t_part)

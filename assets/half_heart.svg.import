@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dn12oanad64tl"
-path="res://.godot/imported/half_heart2.svg-5a6caf24b070e2424d4f36918ee627fa.ctex"
+uid="uid://t55yyroayouh"
+path="res://.godot/imported/half_heart.svg-3445f328a7e547321f7d70ed736470f4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://half_heart2.svg"
-dest_files=["res://.godot/imported/half_heart2.svg-5a6caf24b070e2424d4f36918ee627fa.ctex"]
+source_file="res://assets/half_heart.svg"
+dest_files=["res://.godot/imported/half_heart.svg-3445f328a7e547321f7d70ed736470f4.ctex"]
 
 [params]
 

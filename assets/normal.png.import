@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dnln5w1no5okq"
-path="res://.godot/imported/routefilemanager.svg-74edb8367289a93c910cfa9553991f00.ctex"
+uid="uid://vgo33crd0hx5"
+path="res://.godot/imported/normal.png-cd5e627f4c806fbc9e5de6512108596e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/routefilemanager.svg"
-dest_files=["res://.godot/imported/routefilemanager.svg-74edb8367289a93c910cfa9553991f00.ctex"]
+source_file="res://assets/normal.png"
+dest_files=["res://.godot/imported/normal.png-cd5e627f4c806fbc9e5de6512108596e.ctex"]
 
 [params]
 
@@ -20,24 +20,21 @@ compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
-compress/hdr_compression=1
-compress/normal_map=0
+compress/hdr_compression=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=false
-mipmaps/limit=-1
+mipmaps/limit=0
 roughness/mode=0
 roughness/src_normal=""
 process/channel_remap/red=0
 process/channel_remap/green=1
 process/channel_remap/blue=2
 process/channel_remap/alpha=3
-process/fix_alpha_border=true
+process/fix_alpha_border=false
 process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
+detect_3d/compress_to=0
