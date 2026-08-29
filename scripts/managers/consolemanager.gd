@@ -1060,6 +1060,19 @@ func cmd_pkg(t_args: Array) -> Variant:
 
 			return error
 
+func cmd_rd(t_args: Array) -> Variant:
+	var result = route_file_manager.execute_rd(t_args)
+	if not result:
+		console_output("[ERROR] No se pudo leer archivo", OutputType.ERROR)
+		return
+	return result
+
+func cmd_wr(t_args : Array) -> Variant:
+	var result = route_file_manager.execute_wr(t_args)
+	if not result:
+		console_output("[ERROR] No se pudo leer archivo", OutputType.FATAL)
+		return
+	return result
 
 func cmd_at(t_args: Array) -> Variant:
 	if t_args.size() != 2:
@@ -1162,6 +1175,16 @@ var commands := {
 		"func": cmd_pwd,
 		"args": 1,
 		"raw": [0]
+	},
+	"rd" : {
+		"func" : cmd_rd,
+		"args" : 2,
+		"raw" : [2]
+	},
+	"wr": {
+		"func" : cmd_wr,
+		"args" : 3,
+		"raw" : [2]
 	},
 	"ls" : {
 		"func" : cmd_ls,

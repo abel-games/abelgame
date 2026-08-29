@@ -656,7 +656,6 @@ volume_db = -35.0
 autoplay = true
 
 [connection signal="output" from="ConsoleManager" to="CanvasLayer/ConsolePanel/ConsoleText" method="_on_console_manager_output"]
-[connection signal="request_completed" from="PackageManager/HR" to="PackageManager" method="_on_hr_request_completed"]
 [connection signal="input_event" from="World3D/Ball" to="World3D/Ball" method="_on_input_event"]
 [connection signal="request_completed" from="World3D/Photo/q/HTTPRequest" to="World3D/Photo/q" method="_on_http_request_request_completed"]
 [connection signal="text_change_rejected" from="CanvasLayer/ConsolePanel/ConsoleEntry" to="CanvasLayer/ConsolePanel/ConsoleText" method="_on_console_entry_text_change_rejected"]

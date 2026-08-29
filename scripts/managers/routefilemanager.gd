@@ -52,6 +52,38 @@ func get_physical_route() -> String:
 func get_actual_route() -> Variant:
 	return resolve_route(logical_route, get_home())
 
+func execute_wr(args : Array) -> Variant:
+	if args.size() <= 1:
+		output("[ERROR] Se requieren 2 parámetros más 1 ajuste opcional también recuerde que los archivos son truncados wr [ARCHIVO] [NUEVO CONTENIDO TEXTO]")
+		return
+	var target = get_physical_route().path_join(args[0])
+	var data = str(args[1])
+	if target and data:
+		var file = FileAccess.open(target, FileAccess.WRITE)
+		file.store_string(data)
+		file.close()
+		output("Escrito Exitosamente")
+		return 1
+	return
+
+func execute_rd(args : Array) -> Variant:
+	if args.size() <= 0:
+		output("[ERROR] Para rd (read) se requiere el archivo así rd [ARCHIVO]")
+		return
+	var target = get_physical_route().path_join(args[0])
+	if FileAccess.file_exists(target):
+		var file = FileAccess.open(target, FileAccess.READ)
+		if file:
+			var txt = file.get_as_text()
+			if txt:
+				output(txt)
+				return txt
+			else:
+				output("No se pudo convertir el archivo en texto")
+				return
+		file.close()
+		return
+	return
 
 ## Carga un archivo, recurso o nodo a partir de una ruta.
 func execute_load(args: Array) -> Variant:
