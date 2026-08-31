@@ -103,11 +103,19 @@ func console_output(
 
 
 func _current_context() -> Variant:
-	if context_stack.is_empty():
-		return self
+	# El contexto impuesto por "at" SIEMPRE tiene prioridad.
+	if not context_stack.is_empty():
+		return context_stack.back()
 
-	return context_stack.back()
+	# Sin contexto explícito, utilizar la ruta actual.
+	if route_file_manager != null:
+		var route = route_file_manager.get_actual_route()
 
+		if route != null:
+			return route
+
+	# Último fallback: ConsoleManager.
+	return self
 
 func _push_context(t_value: Variant) -> void:
 	context_stack.append(t_value)
@@ -729,44 +737,31 @@ func cmd_log(t_args: Array) -> Variant:
 
 	return NoResult.new()
 
-
 func cmd_new(t_args: Array) -> Variant:
 	if t_args.is_empty():
 		console_output(
-			"Uso: new [expression]",
+			"Uso: new [CLASS]",
 			OutputType.ERROR
 		)
 		return NoResult.new()
 
-	var t_expression := " ".join(t_args)
+	var type_name := str(t_args[0]).strip_edges()
 
-	var t_result = evaluate_raw_expression(
-		t_expression
-	)
+	if not ClassDB.class_exists(type_name):
+		console_output(
+			"[ERROR] Clase no encontrada: " + type_name,
+			OutputType.ERROR
+		)
+		return NoResult.new()
 
-	if not (t_result is NoResult):
-		return t_result
+	if not ClassDB.can_instantiate(type_name):
+		console_output(
+			"[ERROR] La clase no puede ser instanciada: " + type_name,
+			OutputType.ERROR
+		)
+		return NoResult.new()
 
-	var t_type_name := str(t_args[0])
-
-	if ClassDB.class_exists(t_type_name):
-		if not ClassDB.can_instantiate(t_type_name):
-			console_output(
-				"La clase no puede ser instanciada: "
-				+ t_type_name,
-				OutputType.ERROR
-			)
-			return NoResult.new()
-
-		return ClassDB.instantiate(t_type_name)
-
-	console_output(
-		"No se pudo crear: " + t_expression,
-		OutputType.ERROR
-	)
-
-	return NoResult.new()
-
+	return ClassDB.instantiate(type_name)
 
 func cmd_get(t_args: Array) -> Variant:
 	var t_target: Variant
@@ -870,7 +865,6 @@ func cmd_set(t_args: Array) -> Variant:
 
 	return NoResult.new()
 
-
 func cmd_call(t_args: Array) -> Variant:
 	if t_args.is_empty():
 		console_output(
@@ -879,9 +873,12 @@ func cmd_call(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
+	# El contexto siempre tiene prioridad.
 	var t_target: Variant = _current_context()
 	var t_method_index := 0
 
+	# Si el primer argumento no es un método del contexto,
+	# se interpreta como objeto/ruta.
 	if t_args.size() >= 2:
 		var t_first := str(t_args[0])
 
@@ -891,9 +888,7 @@ func cmd_call(t_args: Array) -> Variant:
 		):
 			t_method_index = 0
 		else:
-			var t_resolved = _resolve_reference(
-				t_first
-			)
+			var t_resolved = _resolve_reference(t_first)
 
 			if (
 				t_resolved != null
@@ -929,15 +924,31 @@ func cmd_call(t_args: Array) -> Variant:
 		t_method_index + 1,
 		t_args.size()
 	):
-		t_parameters.append(
-			t_args[t_index]
-		)
+		var t_parameter = t_args[t_index]
+
+		# Solo la forma abreviada:
+		#
+		# call metodo parametro
+		#
+		# resuelve el primer parámetro.
+		if (
+			t_method_index == 0
+			and t_index == 1
+			and t_parameter is String
+		):
+			var t_resolved_parameter = _resolve_reference(
+				t_parameter
+			)
+
+			if t_resolved_parameter != null:
+				t_parameter = t_resolved_parameter
+
+		t_parameters.append(t_parameter)
 
 	return t_target.callv(
 		t_method,
 		t_parameters
 	)
-
 
 func cmd_emit(t_args: Array) -> Variant:
 	if t_args.is_empty():
@@ -1227,7 +1238,8 @@ var commands := {
 	},
 	"load": {
 		"func": cmd_load,
-		"args": 1
+		"args": 1,
+		"raw": [0]
 	},
 	"new": {
 		"func": cmd_new,
