@@ -2,6 +2,7 @@
 extends Node
 class_name ConsoleManager
 
+#region Definiciones
 
 ## Clase para gestionar una consola con comandos y control del motor.
 ## Se recomienda usar execute() y conectar output para obtener resultados.
@@ -26,6 +27,16 @@ var last_value: Variant = null
 ## No representa una ruta permanente.
 var context_stack: Array[Variant] = []
 
+## Buffer persistente para comandos multilinea.
+## Si el usuario deja un bloque { abierto, la entrada se conserva
+## hasta que el parser detecte que el EOF de la estructura fue resuelto.
+var command_buffer: String = ""
+var command_buffer_active: bool = false
+
+## Buffer para estructuras que pueden continuar con elsif/elif/else.
+var structure_buffer: String = ""
+var structure_buffer_active: bool = false
+
 
 @export var package_manager: PackageManager
 
@@ -40,6 +51,46 @@ class TCommandCall:
 	) -> void:
 		t_name = _t_name
 		t_args = _t_args
+
+
+## Bloque de comandos delimitado por { } .
+## Se analiza sin ejecutarlo y se ejecuta cuando el comando padre lo solicite.
+class TCommandBlock:
+	var t_commands: Array = []
+
+	func _init(_t_commands: Array = []) -> void:
+		t_commands = _t_commands
+
+
+## Cláusula opcional de una estructura encadenable.
+## Es reutilizable para if/elsif/else y futuras construcciones como while/else.
+class TStructureClause:
+	var t_name: String
+	var t_args: Array
+	var t_block: Variant
+
+	func _init(
+		_t_name: String = "",
+		_t_args: Array = [],
+		_t_block: Variant = null
+	) -> void:
+		t_name = _t_name
+		t_args = _t_args
+		t_block = _t_block
+
+
+## Valor que se resuelve durante la ejecución, no durante el parseo.
+## Esto evita que expresiones y variables queden congeladas al construir un bloque.
+class TDeferredValue:
+	var t_text: String
+	var t_expression: bool
+
+	func _init(
+		_t_text: String = "",
+		_t_expression: bool = false
+	) -> void:
+		t_text = _t_text
+		t_expression = _t_expression
 
 
 class NoResult:
@@ -69,7 +120,9 @@ enum OutputType {
 	FATAL
 }
 
+#endregion
 
+#region output
 func console_output(
 	t_value: Variant,
 	type: OutputType = OutputType.LOG
@@ -100,7 +153,9 @@ func console_output(
 	]
 
 	output.emit(formatted)
+#endregion
 
+#region Contexto
 
 func _current_context() -> Variant:
 	# El contexto impuesto por "at" SIEMPRE tiene prioridad.
@@ -140,6 +195,42 @@ func _strip_surrounding_quotes(t_text: String) -> String:
 		return t_text.substr(1, t_text.length() - 2)
 
 	return t_text
+
+
+## Elimina solamente el par exterior de llaves.
+## Ejemplo: { hola qué tal } -> hola qué tal
+## No elimina llaves internas: {{hola}} -> {hola}
+func _strip_braces(t_text: String) -> String:
+	t_text = t_text.strip_edges()
+
+	if (
+		t_text.length() >= 2
+		and t_text.begins_with("{")
+		and t_text.ends_with("}")
+	):
+		t_text = t_text.substr(1, t_text.length() - 2)
+		return t_text.strip_edges()
+
+	return t_text
+
+#endregion
+
+#region Auxiliares
+
+func _process_wr_text(t_text: String) -> String:
+	var t_result := _strip_braces(t_text)
+
+	# Permite escribir saltos de línea con \n	# sin perder los saltos reales que ya existan dentro del bloque.
+	return t_result.replace("\\n", "\n")
+
+
+func _is_brace_block(t_text: String) -> bool:
+	t_text = t_text.strip_edges()
+	return (
+		t_text.length() >= 2
+		and t_text.begins_with("{")
+		and t_text.ends_with("}")
+	)
 
 
 func _has_property(
@@ -376,11 +467,33 @@ func preprocess_expression(t_text: String) -> String:
 	return t_text.replace("@", "last")
 
 
+func _get_expression_inputs() -> Dictionary:
+	var t_names := PackedStringArray()
+	var t_values: Array = []
+
+	for t_name in variables:
+		t_names.append(str(t_name))
+		t_values.append(variables[t_name])
+
+	if not variables.has("last"):
+		t_names.append("last")
+		t_values.append(last_value)
+
+	return {
+		"names": t_names,
+		"values": t_values
+	}
+
+
 func evaluate_expression(t_text: String) -> Variant:
 	var t_expression := Expression.new()
 	var t_parsed_text := preprocess_expression(t_text)
+	var t_inputs := _get_expression_inputs()
 
-	var t_error := t_expression.parse(t_parsed_text)
+	var t_error := t_expression.parse(
+		t_parsed_text,
+		t_inputs["names"]
+	)
 
 	if t_error != OK:
 		return NoResult.new()
@@ -391,24 +504,34 @@ func evaluate_expression(t_text: String) -> Variant:
 		variables
 	)
 
-	var t_result = t_expression.execute([], t_context)
+	var t_result = t_expression.execute(
+		t_inputs["values"],
+		t_context
+	)
 
 	if t_expression.has_execute_failed():
 		return NoResult.new()
 
 	return t_result
 
+#endregion
+
+#region Parser y expresiones
 
 func evaluate_raw_expression(t_text: String) -> Variant:
 	var t_expression := Expression.new()
+	var t_inputs := _get_expression_inputs()
 
-	var t_error := t_expression.parse(t_text)
+	var t_error := t_expression.parse(
+		t_text,
+		t_inputs["names"]
+	)
 
 	if t_error != OK:
 		return NoResult.new()
 
 	var t_result = t_expression.execute(
-		[],
+		t_inputs["values"],
 		ConsoleContext.new(
 			last_value,
 			_current_context(),
@@ -425,8 +548,10 @@ func evaluate_raw_expression(t_text: String) -> Variant:
 func parse_value(t_value: String) -> Variant:
 	t_value = t_value.strip_edges()
 
+	# Los valores dinámicos NO se evalúan aquí.
+	# Se guardan para resolverlos justo antes de ejecutar el comando.
 	if t_value == "@":
-		return last_value
+		return TDeferredValue.new("@", false)
 
 	if (
 		t_value.begins_with("\"")
@@ -446,9 +571,6 @@ func parse_value(t_value: String) -> Variant:
 	if t_value == "false":
 		return false
 
-	if variables.has(t_value):
-		return variables[t_value]
-
 	if t_value.is_valid_int():
 		return int(t_value)
 
@@ -456,11 +578,48 @@ func parse_value(t_value: String) -> Variant:
 		return float(t_value)
 
 	if _looks_like_expression(t_value):
-		var t_expression_result = evaluate_expression(t_value)
+		return TDeferredValue.new(t_value, true)
 
-		if not (t_expression_result is NoResult):
-			return t_expression_result
+	# Los identificadores simples también deben ser diferidos.
+	# Así `log i` dentro de un repeat ve el valor actual de i.
+	return TDeferredValue.new(t_value, false)
 
+
+func _resolve_runtime_value(t_value: Variant) -> Variant:
+	if t_value is TDeferredValue:
+		var t_deferred: TDeferredValue = t_value
+
+		if t_deferred.t_expression:
+			return evaluate_expression(t_deferred.t_text)
+
+		if t_deferred.t_text == "@":
+			return last_value
+
+		if variables.has(t_deferred.t_text):
+			return variables[t_deferred.t_text]
+
+		# Si no existe como variable, conserva el texto original.
+		return t_deferred.t_text
+
+	if t_value is Array:
+		var t_array: Array = t_value
+		var t_resolved_array: Array = []
+
+		for t_item in t_array:
+			t_resolved_array.append(_resolve_runtime_value(t_item))
+
+		return t_resolved_array
+
+	if t_value is Dictionary:
+		var t_dict: Dictionary = t_value
+		var t_resolved_dict: Dictionary = {}
+
+		for t_key in t_dict:
+			t_resolved_dict[t_key] = _resolve_runtime_value(t_dict[t_key])
+
+		return t_resolved_dict
+
+	# Los comandos y bloques son estructuras del AST y no se resuelven aquí.
 	return t_value
 
 
@@ -496,11 +655,205 @@ func _parse_argument(
 		"next_index": t_index + 1
 	}
 
+#endregion
 
+#region Structured Command Parsing
+
+func _has_structure_metadata(t_command_data: Dictionary) -> bool:
+	return t_command_data.has("structure")
+
+
+## Parsea una parte fija de una estructura usando metadata.
+## `block_args` / `call_args` usan Dictionary como conjunto de posiciones.
+func _parse_structured_part(
+	t_tokens: PackedStringArray,
+	t_index: int,
+	t_end: int,
+	t_data: Dictionary
+) -> Dictionary:
+	var t_args_count: int = int(t_data.get("args", 0))
+	var t_raw: Dictionary = t_data.get("raw", {})
+	var t_call_args: Dictionary = t_data.get("call_args", {})
+	var t_block_args: Dictionary = t_data.get("block_args", {})
+	var t_text_args: Dictionary = t_data.get("text_args", {})
+
+	var t_args: Array = []
+	var t_current_index := t_index
+
+	for t_argument_index in range(t_args_count):
+		if t_current_index >= t_end:
+			return {
+				"ok": false,
+				"args": t_args,
+				"next_index": t_current_index
+			}
+
+		if t_argument_index in t_call_args:
+			var t_nested_result := _parse_nested_command(
+				t_tokens,
+				t_current_index,
+				t_end
+			)
+
+			if t_nested_result["value"] is NoResult:
+				return {
+					"ok": false,
+					"args": t_args,
+					"next_index": t_current_index
+				}
+
+			t_args.append(t_nested_result["value"])
+			t_current_index = t_nested_result["next_index"]
+			continue
+
+		if t_argument_index in t_block_args:
+			var t_block_token := t_tokens[t_current_index]
+
+			if not _is_brace_block(t_block_token):
+				return {
+					"ok": false,
+					"args": t_args,
+					"next_index": t_current_index
+				}
+
+			var t_block = _parse_block_token(t_block_token)
+			if t_block is NoResult:
+				return {
+					"ok": false,
+					"args": t_args,
+					"next_index": t_current_index
+				}
+
+			t_args.append(t_block)
+			t_current_index += 1
+			continue
+
+		var t_is_raw := t_argument_index in t_raw
+		var t_parsed := _parse_argument(
+			t_tokens,
+			t_current_index,
+			t_end,
+			t_is_raw
+		)
+
+		if t_parsed["value"] is NoResult:
+			return {
+				"ok": false,
+				"args": t_args,
+				"next_index": t_current_index
+			}
+
+		var t_value: Variant = t_parsed["value"]
+		if t_argument_index in t_text_args and t_value is String:
+			t_value = _process_wr_text(t_value)
+
+		t_args.append(t_value)
+		t_current_index = t_parsed["next_index"]
+
+	return {
+		"ok": true,
+		"args": t_args,
+		"next_index": t_current_index
+	}
+
+
+## Ensambla una estructura completa y consume sus continuaciones.
+## La estructura resultante sigue siendo un TCommandCall; sus continuaciones
+## son TStructureClause y por tanto no son comandos independientes.
+func _parse_structured_command_call(
+	t_tokens: PackedStringArray,
+	t_index: int,
+	t_end: int,
+	t_command_name: String,
+	t_command_data: Dictionary
+) -> Dictionary:
+	var t_structure: Dictionary = t_command_data["structure"]
+	var t_head_data: Dictionary = t_structure.get("head", {})
+
+	var t_head := _parse_structured_part(
+		t_tokens,
+		t_index + 1,
+		t_end,
+		t_head_data
+	)
+
+	if not t_head["ok"]:
+		return {
+			"value": NoResult.new(),
+			"next_index": t_head["next_index"]
+		}
+
+	var t_call := TCommandCall.new(t_command_name)
+	for t_argument in t_head["args"]:
+		t_call.t_args.append(t_argument)
+
+	var t_current_index: int = t_head["next_index"]
+	var t_continuations: Dictionary = t_structure.get("continuations", {})
+	var t_seen_terminal := false
+
+	while t_current_index < t_end:
+		var t_keyword := str(t_tokens[t_current_index])
+
+		if not t_continuations.has(t_keyword):
+			break
+
+		if t_seen_terminal:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_current_index
+			}
+
+		var t_clause_data: Dictionary = t_continuations[t_keyword]
+		var t_clause := _parse_structured_part(
+			t_tokens,
+			t_current_index + 1,
+			t_end,
+			t_clause_data
+		)
+
+		if not t_clause["ok"]:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_clause["next_index"]
+			}
+
+		var t_clause_args: Array = t_clause["args"]
+		var t_block_index := int(t_clause_data.get("block_index", -1))
+		var t_clause_block: Variant = null
+		var t_condition_args: Array = []
+
+		for t_clause_index in range(t_clause_args.size()):
+			if t_clause_index == t_block_index:
+				t_clause_block = t_clause_args[t_clause_index]
+			else:
+				t_condition_args.append(t_clause_args[t_clause_index])
+
+		t_call.t_args.append(
+			TStructureClause.new(
+				t_keyword,
+				t_condition_args,
+				t_clause_block
+			)
+		)
+
+		t_current_index = t_clause["next_index"]
+		t_seen_terminal = bool(t_clause_data.get("terminal", false))
+
+	return {
+		"value": t_call,
+		"next_index": t_current_index
+	}
+
+#endregion
+
+#region ready
 func _ready() -> void:
 	var tree: SceneTree = get_tree()
 	variables["tree"] = tree
+#endregion
 
+#region Parser
+#region Command Call Parsing
 
 func _parse_command_call(
 	t_tokens: PackedStringArray,
@@ -522,100 +875,90 @@ func _parse_command_call(
 		}
 
 	var t_command_data: Dictionary = commands[t_token]
-	var t_amount: int = t_command_data["args"]
-	var t_raw: Array = t_command_data.get("raw", [])
 
+	if _has_structure_metadata(t_command_data):
+		return _parse_structured_command_call(
+			t_tokens,
+			t_index,
+			t_end,
+			t_token,
+			t_command_data
+		)
+
+	var t_amount: int = t_command_data["args"]
+	var t_raw: Dictionary = t_command_data.get("raw", {})
+	var t_call_args: Dictionary = t_command_data.get("call_args", {})
+	var t_block_args: Dictionary = t_command_data.get("block_args", {})
+	var t_text_args: Dictionary = t_command_data.get("text_args", {})
 	var t_call := TCommandCall.new(t_token)
 
-	if t_token == "at":
-		if t_index + 2 >= t_end:
-			return {
-				"value": NoResult.new(),
-				"next_index": t_end
-			}
-
-		var t_reference = parse_value(
-			t_tokens[t_index + 1]
-		)
-
-		var t_nested := _parse_command_call(
-			t_tokens,
-			t_index + 2,
-			t_end
-		)
-
-		if t_nested["value"] is NoResult:
-			return {
-				"value": NoResult.new(),
-				"next_index": t_end
-			}
-
-		t_call.t_args = [
-			t_reference,
-			t_nested["value"]
-		]
-
-		return {
-			"value": t_call,
-			"next_index": t_nested["next_index"]
-		}
-
-	if t_token == "repeat":
-		if t_index + 2 >= t_end:
-			return {
-				"value": NoResult.new(),
-				"next_index": t_end
-			}
-
-		var t_amount_result = parse_value(
-			t_tokens[t_index + 1]
-		)
-
-		var t_nested_repeat := _parse_command_call(
-			t_tokens,
-			t_index + 2,
-			t_end
-		)
-
-		if t_nested_repeat["value"] is NoResult:
-			return {
-				"value": NoResult.new(),
-				"next_index": t_end
-			}
-
-		t_call.t_args = [
-			t_amount_result,
-			t_nested_repeat["value"]
-		]
-
-		return {
-			"value": t_call,
-			"next_index": t_nested_repeat["next_index"]
-		}
-
 	if t_amount == -1:
-		for t_argument_index in range(
-			t_index + 1,
-			t_end
-		):
-			var t_argument_position := (
-				t_argument_index - t_index - 1
+		@warning_ignore("confusable_local_declaration")
+		var t_current_index := t_index + 1
+
+		while t_current_index < t_end:
+			var t_argument_position := t_current_index - t_index - 1
+
+			if t_argument_position in t_call_args:
+				var t_nested_result := _parse_nested_command(
+					t_tokens,
+					t_current_index,
+					t_end
+				)
+
+				if t_nested_result["value"] is NoResult:
+					return {
+						"value": NoResult.new(),
+						"next_index": t_end
+					}
+
+				t_call.t_args.append(t_nested_result["value"])
+				t_current_index = t_nested_result["next_index"]
+				continue
+
+			if t_argument_position in t_block_args:
+				var t_block_token := t_tokens[t_current_index]
+				if not _is_brace_block(t_block_token):
+					return {
+						"value": NoResult.new(),
+						"next_index": t_end
+					}
+
+				var t_block = _parse_block_token(t_block_token)
+				if t_block is NoResult:
+					return {
+						"value": NoResult.new(),
+						"next_index": t_end
+					}
+
+				t_call.t_args.append(t_block)
+				t_current_index += 1
+				continue
+
+			var t_is_raw := t_argument_position in t_raw
+			var t_parsed := _parse_argument(
+				t_tokens,
+				t_current_index,
+				t_end,
+				t_is_raw
 			)
 
-			if t_argument_position in t_raw:
-				t_call.t_args.append(
-					t_tokens[t_argument_index]
-				)
-			else:
-				t_call.t_args.append(
-					parse_value(
-						t_tokens[t_argument_index]
-					)
-				)
+			if t_parsed["value"] is NoResult:
+				return {
+					"value": NoResult.new(),
+					"next_index": t_end
+				}
+
+			var t_value: Variant = t_parsed["value"]
+			if t_argument_position in t_text_args and t_value is String:
+				t_value = _process_wr_text(t_value)
+
+			t_call.t_args.append(t_value)
+			t_current_index = t_parsed["next_index"]
 
 		return {
 			"value": t_call,
-			"next_index": t_end
+			"next_index": t_current_index
 		}
 
 	var t_current_index := t_index + 1
@@ -624,8 +967,34 @@ func _parse_command_call(
 		if t_current_index >= t_end:
 			break
 
-		var t_is_raw := t_argument_index in t_raw
+		if t_argument_index in t_call_args:
+			var t_nested_result := _parse_nested_command(
+				t_tokens,
+				t_current_index,
+				t_end
+			)
 
+			if t_nested_result["value"] is NoResult:
+				break
+
+			t_call.t_args.append(t_nested_result["value"])
+			t_current_index = t_nested_result["next_index"]
+			continue
+
+		if t_argument_index in t_block_args:
+			var t_block_token := t_tokens[t_current_index]
+			if not _is_brace_block(t_block_token):
+				break
+
+			var t_block = _parse_block_token(t_block_token)
+			if t_block is NoResult:
+				break
+
+			t_call.t_args.append(t_block)
+			t_current_index += 1
+			continue
+
+		var t_is_raw := t_argument_index in t_raw
 		var t_parsed := _parse_argument(
 			t_tokens,
 			t_current_index,
@@ -636,10 +1005,11 @@ func _parse_command_call(
 		if t_parsed["value"] is NoResult:
 			break
 
-		t_call.t_args.append(
-			t_parsed["value"]
-		)
+		var t_parsed_value: Variant = t_parsed["value"]
+		if t_argument_index in t_text_args and t_parsed_value is String:
+			t_parsed_value = _process_wr_text(t_parsed_value)
 
+		t_call.t_args.append(t_parsed_value)
 		t_current_index = t_parsed["next_index"]
 
 	return {
@@ -648,6 +1018,36 @@ func _parse_command_call(
 	}
 
 
+func _parse_nested_command(
+	t_tokens: PackedStringArray,
+	t_index: int,
+	t_end: int
+) -> Dictionary:
+	if t_index >= t_end:
+		return {
+			"value": NoResult.new(),
+			"next_index": t_index
+		}
+
+	var t_token := t_tokens[t_index]
+
+	if _is_brace_block(t_token):
+		return {
+			"value": _parse_block_token(t_token),
+			"next_index": t_index + 1
+		}
+
+	return _parse_command_call(
+		t_tokens,
+		t_index,
+		t_end
+	)
+
+#endregion
+
+#endregion
+
+#region execute_call
 func _execute_call(t_call: TCommandCall) -> Variant:
 	if t_call == null:
 		return NoResult.new()
@@ -660,15 +1060,396 @@ func _execute_call(t_call: TCommandCall) -> Variant:
 	]
 
 	var t_function: Callable = t_command_data["func"]
+	var t_runtime_args: Array = []
+
+	for t_argument in t_call.t_args:
+		# Los bloques y llamadas anidadas ya son AST y deben permanecer intactos.
+		if t_argument is TCommandCall or t_argument is TCommandBlock:
+			t_runtime_args.append(t_argument)
+		else:
+			t_runtime_args.append(
+				_resolve_runtime_value(t_argument)
+			)
 
 	var t_result = await t_function.call(
-		t_call.t_args
+		t_runtime_args
 	)
 
 	if not (t_result is NoResult):
 		last_value = t_result
 
 	return t_result
+#endregion
+
+#region Command Blocks
+#region Block Parsing
+
+func _parse_block_token(t_block_token: String) -> Variant:
+	var t_content := _strip_braces(t_block_token)
+	var t_block := TCommandBlock.new()
+
+	var t_commands := _split_complete_commands(t_content)
+
+	for t_text in t_commands:
+		var t_line := t_text.strip_edges()
+		if t_line.is_empty():
+			continue
+
+		var t_tokens := tokenize(t_line)
+		if t_tokens.is_empty():
+			continue
+
+		var t_parsed := _parse_command_call(
+			t_tokens,
+			0,
+			t_tokens.size()
+		)
+
+		if t_parsed["value"] is NoResult:
+			return NoResult.new()
+
+		if t_parsed["value"] is TCommandCall:
+			t_block.t_commands.append(t_parsed["value"])
+		else:
+			return NoResult.new()
+
+	return t_block
+
+
+
+#endregion
+
+#region Block Execution
+
+func _execute_block(t_block: TCommandBlock) -> Variant:
+	var t_final_result: Variant = NoResult.new()
+
+	for t_command in t_block.t_commands:
+		var t_result = await _execute_call(t_command)
+
+		if not (t_result is NoResult):
+			t_final_result = t_result
+
+	return t_final_result
+
+
+#endregion
+#endregion
+
+#region Command Splitting
+
+func _get_structure_continuation_names() -> Dictionary:
+	var t_names: Dictionary = {}
+
+	for t_command_name in commands:
+		var t_command_data: Dictionary = commands[t_command_name]
+		if not _has_structure_metadata(t_command_data):
+			continue
+
+		var t_structure: Dictionary = t_command_data["structure"]
+		var t_continuations: Dictionary = t_structure.get(
+			"continuations",
+			{}
+		)
+
+		for t_keyword in t_continuations:
+			t_names[str(t_keyword)] = true
+
+	return t_names
+
+
+func _starts_structure_continuation(t_text: String) -> bool:
+	var t_tokens := tokenize(t_text.strip_edges())
+	if t_tokens.is_empty():
+		return false
+
+	var t_keyword := str(t_tokens[0])
+	return t_keyword in _get_structure_continuation_names()
+
+
+func _command_can_have_structure_continuation(t_text: String) -> bool:
+	var t_tokens := tokenize(t_text.strip_edges())
+	if t_tokens.is_empty():
+		return false
+
+	var t_command_name := str(t_tokens[0])
+	if not commands.has(t_command_name):
+		return false
+
+	return _has_structure_metadata(commands[t_command_name])
+
+
+## Divide comandos completos a nivel superior y vuelve a unir las
+## continuaciones estructurales aunque estén en otra línea.
+func _split_complete_commands(t_text: String) -> Array[String]:
+	var t_raw_result: Array[String] = []
+	var t_start := 0
+	var t_braces := 0
+	var t_quote := false
+	var t_escaped := false
+
+	for t_index in range(t_text.length()):
+		var t_character := t_text[t_index]
+
+		if t_escaped:
+			t_escaped = false
+			continue
+
+		if t_character == "\\":
+			t_escaped = true
+			continue
+
+		if t_character == "\"":
+			t_quote = not t_quote
+			continue
+
+		if t_quote:
+			continue
+
+		match t_character:
+			"{":
+				t_braces += 1
+			"}":
+				t_braces = maxi(0, t_braces - 1)
+			"\n":
+				if t_braces == 0:
+					var t_command := t_text.substr(
+						t_start,
+						t_index - t_start
+					)
+					if not t_command.strip_edges().is_empty():
+						t_raw_result.append(t_command)
+					t_start = t_index + 1
+
+	var t_tail := t_text.substr(t_start)
+	if not t_tail.strip_edges().is_empty():
+		t_raw_result.append(t_tail)
+
+	var t_result: Array[String] = []
+
+	for t_command in t_raw_result:
+		var t_text_command := t_command.strip_edges()
+		if t_text_command.is_empty():
+			continue
+
+		if (
+				not t_result.is_empty()
+				and _starts_structure_continuation(t_text_command)
+				and _command_can_have_structure_continuation(
+					t_result[t_result.size() - 1]
+				)
+		):
+			t_result[t_result.size() - 1] += " " + t_text_command
+			continue
+
+		t_result.append(t_text_command)
+
+	return t_result
+
+
+## Detecta si la entrada todavía está esperando el cierre de un bloque.
+
+
+#endregion
+
+#region que es esta wea
+func _has_unclosed_block(t_text: String) -> bool:
+	var t_braces := 0
+	var t_quote := false
+	var t_escaped := false
+
+	for t_character in t_text:
+		if t_escaped:
+			t_escaped = false
+			continue
+
+		if t_character == "\\":
+			t_escaped = true
+			continue
+
+		if t_character == "\"":
+			t_quote = not t_quote
+			continue
+
+		if t_quote:
+			continue
+
+		if t_character == "{":
+			t_braces += 1
+		elif t_character == "}":
+			t_braces -= 1
+
+		if t_braces < 0:
+			return false
+
+	return t_braces > 0
+#endregion
+
+#region Execution Entry Points
+
+func _flush_structure_buffer() -> void:
+	if structure_buffer.is_empty():
+		structure_buffer_active = false
+		return
+
+	var t_pending := structure_buffer
+	structure_buffer = ""
+	structure_buffer_active = false
+
+	var t_commands := _split_complete_commands(t_pending)
+	for t_command_text in t_commands:
+		var t_text := t_command_text.strip_edges()
+		if t_text.is_empty():
+			continue
+
+		var t_tokens := tokenize(t_text)
+		if t_tokens.is_empty():
+			continue
+
+		var t_result = await parse_command(t_tokens)
+		if not (t_result is NoResult):
+			last_value = t_result
+
+
+func _input_starts_structure_continuation(t_command: String) -> bool:
+	var t_commands := _split_complete_commands(t_command)
+	if t_commands.is_empty():
+		return false
+
+	return _starts_structure_continuation(t_commands[0])
+
+
+func _has_potential_structure_continuation(
+	t_tokens: PackedStringArray
+) -> bool:
+	if t_tokens.is_empty():
+		return false
+
+	var t_command_name := str(t_tokens[0])
+	if not commands.has(t_command_name):
+		return false
+
+	var t_command_data: Dictionary = commands[t_command_name]
+	if not _has_structure_metadata(t_command_data):
+		return false
+
+	var t_structure: Dictionary = t_command_data["structure"]
+	var t_head: Dictionary = t_structure.get("head", {})
+	var t_head_args: int = int(t_head.get("args", 0))
+	var t_continuations: Dictionary = t_structure.get(
+		"continuations",
+		{}
+	)
+
+	if t_continuations.is_empty():
+		return false
+
+	# Las posiciones que siguen al head son las cláusulas ya presentes
+	# en esta entrada. Si existe una cláusula terminal (por ejemplo else),
+	# ya no hay nada que esperar.
+	var t_first_clause_index := 1 + t_head_args
+	for t_index in range(
+		t_first_clause_index,
+		t_tokens.size()
+	):
+		var t_keyword := str(t_tokens[t_index])
+		if not t_continuations.has(t_keyword):
+			continue
+
+		var t_clause_data: Dictionary = t_continuations[t_keyword]
+		if bool(t_clause_data.get("terminal", false)):
+			return false
+
+	return true
+
+
+func execute(t_command: String) -> int:
+	t_command = t_command.replace("\r\n", "\n").replace("\r", "\n")
+
+	# Si había una estructura completa pendiente, una nueva entrada que no
+	# empiece por una continuación significa que aquella estructura terminó.
+	if structure_buffer_active and not structure_buffer.is_empty():
+		if _input_starts_structure_continuation(t_command):
+			t_command = structure_buffer + " " + t_command
+			structure_buffer = ""
+			structure_buffer_active = false
+		else:
+			await _flush_structure_buffer()
+
+	# `;` sigue siendo un separador opcional fuera de bloques y comillas.
+	var t_normalized := ""
+	var t_quote := false
+	var t_escaped := false
+	var t_braces := 0
+
+	for t_character in t_command:
+		if t_escaped:
+			t_normalized += t_character
+			t_escaped = false
+			continue
+
+		if t_character == "\\":
+			t_normalized += t_character
+			t_escaped = true
+			continue
+
+		if t_character == "\"":
+			t_quote = not t_quote
+			t_normalized += t_character
+			continue
+
+		if not t_quote:
+			if t_character == "{":
+				t_braces += 1
+			elif t_character == "}":
+				t_braces = maxi(0, t_braces - 1)
+			elif t_character == ";" and t_braces == 0:
+				t_normalized += "\n"
+				continue
+
+		t_normalized += t_character
+
+	if not command_buffer.is_empty():
+		command_buffer += "\n"
+
+	command_buffer += t_normalized
+
+	var t_commands := _split_complete_commands(command_buffer)
+
+	command_buffer = ""
+	command_buffer_active = false
+
+	for t_index in range(t_commands.size()):
+		var t_command_text: String = t_commands[t_index]
+		var t_text := t_command_text.strip_edges()
+		if t_text.is_empty():
+			continue
+
+		if _has_unclosed_block(t_text):
+			command_buffer = t_text
+			command_buffer_active = true
+			continue
+
+		var t_tokens := tokenize(t_text)
+		if t_tokens.is_empty():
+			continue
+
+		# Si es la última entrada completa y la estructura admite continuación,
+		# la retenemos para que una próxima entrada pueda aportar elsif/else.
+		if (
+				t_index == t_commands.size() - 1
+				and _command_can_have_structure_continuation(t_text)
+				and _has_potential_structure_continuation(t_tokens)
+		):
+			structure_buffer = t_text
+			structure_buffer_active = true
+			continue
+
+		var t_result = await parse_command(t_tokens)
+		if not (t_result is NoResult):
+			last_value = t_result
+
+	return 0
 
 
 func parse_command(
@@ -691,6 +1472,10 @@ func parse_command(
 
 	return await _execute_call(t_call)
 
+
+#endregion
+
+#region flujo de variables
 
 func cmd_vget(t_args: Array) -> Variant:
 	if t_args.size() != 1:
@@ -727,7 +1512,9 @@ func cmd_vset(t_args: Array) -> Variant:
 
 	return NoResult.new()
 
+#endregion
 
+#region log y new
 func cmd_log(t_args: Array) -> Variant:
 	if not t_args.is_empty():
 		console_output(
@@ -763,6 +1550,9 @@ func cmd_new(t_args: Array) -> Variant:
 
 	return ClassDB.instantiate(type_name)
 
+#endregion
+
+#region get y set
 func cmd_get(t_args: Array) -> Variant:
 	var t_target: Variant
 	var t_property: String
@@ -864,6 +1654,10 @@ func cmd_set(t_args: Array) -> Variant:
 		return NoResult.new()
 
 	return NoResult.new()
+
+#endregion
+
+#region call y emit
 
 func cmd_call(t_args: Array) -> Variant:
 	if t_args.is_empty():
@@ -1019,7 +1813,9 @@ func cmd_emit(t_args: Array) -> Variant:
 
 	return NoResult.new()
 
+#endregion
 
+#region rfm 1
 func cmd_load(t_args: Array) -> Variant:
 	return route_file_manager.execute_load(t_args)
 
@@ -1035,7 +1831,9 @@ func cmd_ls(args: Array) -> Variant:
 func cmd_pwd(args: Array) -> Variant:
 	return route_file_manager.execute_pwd(args)
 
+#endregion
 
+#region El Gran pkg
 func cmd_pkg(t_args: Array) -> Variant:
 	var error: Error = Error.ERR_BUG
 
@@ -1070,7 +1868,9 @@ func cmd_pkg(t_args: Array) -> Variant:
 			)
 
 			return error
+#endregion
 
+#region rfm 2
 func cmd_rd(t_args: Array) -> Variant:
 	var result = route_file_manager.execute_rd(t_args)
 	if not result:
@@ -1078,13 +1878,25 @@ func cmd_rd(t_args: Array) -> Variant:
 		return
 	return result
 
+func cmd_mkdir(t_args) -> Variant:
+	var result = route_file_manager.execute_mkdir(t_args)
+	return result
+
 func cmd_wr(t_args : Array) -> Variant:
 	var result = route_file_manager.execute_wr(t_args)
 	if not result:
-		console_output("[ERROR] No se pudo leer archivo", OutputType.FATAL)
+		console_output("[ERROR] No se pudo escribir archivo", OutputType.ERROR)
 		return
 	return result
 
+func cmd_dl(t_args: Array) -> Variant:
+	return route_file_manager.execute_dl(t_args)
+
+#endregion
+
+#region bloques_de_codigo
+
+#region contexto comando
 func cmd_at(t_args: Array) -> Variant:
 	if t_args.size() != 2:
 		console_output(
@@ -1109,21 +1921,64 @@ func cmd_at(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	if not t_nested is TCommandCall:
+	if not (t_nested is TCommandCall or t_nested is TCommandBlock):
 		console_output(
-			"Se esperaba un comando",
+			"Se esperaba un comando o bloque",
 			OutputType.ERROR
 		)
 		return NoResult.new()
 
 	_push_context(t_target)
 
-	var t_result = await _execute_call(t_nested)
+	var t_result: Variant
+	if t_nested is TCommandBlock:
+		t_result = await _execute_block(t_nested)
+	else:
+		t_result = await _execute_call(t_nested)
 
 	_pop_context()
 
 	return t_result
+#endregion
 
+#region repetidores
+
+func cmd_while(t_args: Array) -> Variant:
+	if t_args.size() != 2:
+		console_output(
+			"[FATAL] No se pudo ejecutar. Use: while [CONDICION] [COMANDO]",
+			OutputType.FATAL
+		)
+		return NoResult.new()
+
+	var cnd = t_args[0]
+	var command = t_args[1]
+	var last: Variant = NoResult.new()
+
+	while true:
+		var ev = _resolve_runtime_value(cnd)
+
+		if ev is NoResult:
+			return NoResult.new()
+
+		if not bool(ev):
+			break
+
+		if command is TCommandBlock:
+			last = await _execute_block(command)
+		elif command is TCommandCall:
+			last = await _execute_call(command)
+		else:
+			console_output(
+				"[ERROR] while esperaba un comando o un bloque",
+				OutputType.ERROR
+			)
+			return NoResult.new()
+
+		# Ceder el control al motor
+		await get_tree().process_frame
+
+	return last
 
 func cmd_repeat(t_args: Array) -> Variant:
 	if t_args.size() != 2:
@@ -1150,9 +2005,9 @@ func cmd_repeat(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	if not t_nested is TCommandCall:
+	if not (t_nested is TCommandCall or t_nested is TCommandBlock):
 		console_output(
-			"Se esperaba un comando",
+			"Se esperaba un comando o bloque",
 			OutputType.ERROR
 		)
 		return NoResult.new()
@@ -1160,13 +2015,85 @@ func cmd_repeat(t_args: Array) -> Variant:
 	var t_final_result: Variant = NoResult.new()
 
 	for _t_i in range(t_amount):
-		var t_result = await _execute_call(t_nested)
+		var t_result: Variant
+		if t_nested is TCommandBlock:
+			t_result = await _execute_block(t_nested)
+		else:
+			t_result = await _execute_call(t_nested)
 
 		if not (t_result is NoResult):
 			t_final_result = t_result
 
 	return t_final_result
+#endregion
+#endregion
 
+#region Control de flujo
+
+func _execute_block_result(t_block: Variant) -> Variant:
+	if t_block is TCommandBlock:
+		return await _execute_block(t_block)
+
+	if t_block is TCommandCall:
+		return await _execute_call(t_block)
+
+	return NoResult.new()
+
+
+func cmd_if(t_args: Array) -> Variant:
+	if t_args.size() < 2:
+		console_output(
+			"Uso: if [CONDICION] [BLOQUE]",
+			OutputType.ERROR
+		)
+		return NoResult.new()
+
+	var t_condition = _resolve_runtime_value(t_args[0])
+	if t_condition is NoResult:
+		console_output(
+			"No se pudo evaluar la condición del if",
+			OutputType.ERROR
+		)
+		return NoResult.new()
+
+	if bool(t_condition):
+		return await _execute_block_result(t_args[1])
+
+	for t_index in range(2, t_args.size()):
+		var t_clause = t_args[t_index]
+
+		if not t_clause is TStructureClause:
+			continue
+
+		if t_clause.t_name == "else":
+			return await _execute_block_result(t_clause.t_block)
+
+		if (
+				t_clause.t_name == "elsif"
+				or t_clause.t_name == "elif"
+		):
+			if t_clause.t_args.is_empty():
+				continue
+
+			var t_clause_condition = _resolve_runtime_value(
+				t_clause.t_args[0]
+			)
+
+			if t_clause_condition is NoResult:
+				console_output(
+					"No se pudo evaluar la condición de %s" % t_clause.t_name,
+					OutputType.ERROR
+				)
+				return NoResult.new()
+
+			if bool(t_clause_condition):
+				return await _execute_block_result(
+					t_clause.t_block
+				)
+
+	return NoResult.new()
+
+#endregion
 
 # ---------------------------------------------------------
 # TU DICCIONARIO `commands` VA AQUÍ SIN CAMBIARLO.
@@ -1177,69 +2104,86 @@ var commands := {
 		"func": cmd_log,
 		"args": 1,
 	},
-	"cd" : {
-		"func" : cmd_cd,
-		"args" : 1,
-		"raw" : [0]
+	"cd": {
+		"func": cmd_cd,
+		"args": 1,
+		"raw": {0: true}
 	},
-	"pwd" : {
+	"pwd": {
 		"func": cmd_pwd,
 		"args": 1,
-		"raw": [0]
+		"raw": {0: true}
 	},
-	"rd" : {
-		"func" : cmd_rd,
-		"args" : 2,
-		"raw" : [2]
+	"rd": {
+		"func": cmd_rd,
+		"args": 2,
+		"raw": {0: true, 1: true}
 	},
 	"wr": {
-		"func" : cmd_wr,
-		"args" : 3,
-		"raw" : [2]
+		"func": cmd_wr,
+		"args": 2,
+		"raw": {0: true},
+		"text_args": {1: true}
 	},
-	"ls" : {
-		"func" : cmd_ls,
-		"args" : 0
+	"dl": {
+		"func": cmd_dl,
+		"args": 1,
+		"raw": {0: true}
+	},
+	"mkdir": {
+		"func": cmd_mkdir,
+		"args": 2,
+		"raw": {0: true}
+	},
+	"ls": {
+		"func": cmd_ls,
+		"args": 0
 	},
 	"get": {
 		"func": cmd_get,
 		"args": 2,
-		"raw": [0]
+		"raw": {0: true}
 	},
-	"pkg" : {
-		"func" : cmd_pkg,
-		"args" : -1,
-		"raw" : []
+	"pkg": {
+		"func": cmd_pkg,
+		"args": -1,
+		"raw": {}
 	},
 	"set": {
 		"func": cmd_set,
 		"args": 3,
-		"raw": [0]
+		"raw": {0: true}
 	},
 	"call": {
 		"func": cmd_call,
 		"args": -1,
-		"raw": [0, 1]
+		"raw": {0: true, 1: true}
 	},
 	"emit": {
 		"func": cmd_emit,
 		"args": -1,
-		"raw": [0, 1]
+		"raw": {0: true, 1: true}
 	},
 	"vget": {
 		"func": cmd_vget,
 		"args": 1,
-		"raw": [0]
+		"raw": {0: true}
 	},
 	"vset": {
 		"func": cmd_vset,
 		"args": 2,
-		"raw": [0]
+		"raw": {0: true}
 	},
 	"load": {
 		"func": cmd_load,
 		"args": 1,
-		"raw": [0]
+		"raw": {0: true}
+	},
+	"while": {
+		"func": cmd_while,
+		"args": 2,
+		"call_args": {1: true},
+		"block_args": {1: true}
 	},
 	"new": {
 		"func": cmd_new,
@@ -1248,12 +2192,44 @@ var commands := {
 	"at": {
 		"func": cmd_at,
 		"args": 2,
-		"raw": []
+		"raw": {},
+		"call_args": {1: true},
+		"block_args": {1: true}
 	},
 	"repeat": {
 		"func": cmd_repeat,
 		"args": 2,
-		"raw": []
+		"raw": {},
+		"call_args": {1: true},
+		"block_args": {1: true}
+	},
+	"if": {
+		"func": cmd_if,
+		"args": -1,
+		"structure": {
+			"head": {
+				"args": 2,
+				"block_args": {1: true}
+			},
+			"continuations": {
+				"elsif": {
+					"args": 2,
+					"block_args": {1: true},
+					"block_index": 1
+				},
+				"elif": {
+					"args": 2,
+					"block_args": {1: true},
+					"block_index": 1
+				},
+				"else": {
+					"args": 1,
+					"block_args": {0: true},
+					"block_index": 0,
+					"terminal": true
+				}
+			}
+		}
 	}
 }
 
@@ -1319,28 +2295,5 @@ func tokenize(t_text: String) -> PackedStringArray:
 	return t_tokens
 
 
-func execute(t_command: String) -> int:
-	t_command = t_command.replace(";", "\n")
 
-	var t_command_lines := t_command.split("\n")
-
-	if t_command_lines.is_empty():
-		return 1
-
-	for t_line in t_command_lines:
-		var t_text := t_line.strip_edges()
-
-		if t_text.is_empty():
-			continue
-
-		var t_tokens := tokenize(t_text)
-
-		if t_tokens.is_empty():
-			continue
-
-		var t_result = await parse_command(t_tokens)
-
-		if not (t_result is NoResult):
-			last_value = t_result
-
-	return 0
+# CAB: runtime expression evaluation - 2026-09-01

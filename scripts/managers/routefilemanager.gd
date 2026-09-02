@@ -54,21 +54,44 @@ func get_actual_route() -> Variant:
 
 func execute_wr(args : Array) -> Variant:
 	if args.size() <= 1:
-		output("[ERROR] Se requieren 2 parámetros más 1 ajuste opcional también recuerde que los archivos son truncados wr [ARCHIVO] [NUEVO CONTENIDO TEXTO]")
+		output("[FATAL] Se requieren 2 parámetros más 1 ajuste opcional también recuerde que los archivos son truncados wr [ARCHIVO] [NUEVO CONTENIDO TEXTO]", ConsoleManager.OutputType.FATAL)
 		return
 	var target = get_physical_route().path_join(args[0])
 	var data = str(args[1])
 	if target and data:
 		var file = FileAccess.open(target, FileAccess.WRITE)
+		if not file:
+			output("[ERROR] No se pudo crear archivo", ConsoleManager.OutputType.ERROR)
 		file.store_string(data)
 		file.close()
 		output("Escrito Exitosamente")
 		return 1
 	return
 
+func execute_mkdir(args : Array) -> Variant:
+	var flag : String
+	var target
+	if args.size() == 1:
+		flag = ""
+	elif args.size() == 2:
+		flag = args[1]
+	else:
+		output("[FATAL] Parámetros insuficientes use mkdir [DIRRECIÓN]", ConsoleManager.OutputType.FATAL)
+		return
+	flag = flag.strip_edges()
+	#algun día haré algo con las flags
+	target = args[0].strip_edges()
+	var dir = DirAccess.open(get_physical_route())
+	var error = dir.make_dir_recursive(target)
+	if error != OK:
+		output("[ERROR] No se pudo crear directorio", ConsoleManager.OutputType.ERROR)
+		return error
+	var total_dir := (target as String).path_join(target)
+	return total_dir
+
 func execute_rd(args : Array) -> Variant:
 	if args.size() <= 0:
-		output("[ERROR] Para rd (read) se requiere el archivo así rd [ARCHIVO]")
+		output("[FATAL] Para rd (read) se requiere el archivo así rd [ARCHIVO]", ConsoleManager.OutputType.FATAL)
 		return
 	var target = get_physical_route().path_join(args[0])
 	if FileAccess.file_exists(target):
@@ -79,7 +102,7 @@ func execute_rd(args : Array) -> Variant:
 				output(txt)
 				return txt
 			else:
-				output("No se pudo convertir el archivo en texto")
+				output("[ERROR] No se pudo convertir el archivo en texto", ConsoleManager.OutputType.ERROR)
 				return
 		file.close()
 		return
@@ -88,19 +111,19 @@ func execute_rd(args : Array) -> Variant:
 ## Carga un archivo, recurso o nodo a partir de una ruta.
 func execute_load(args: Array) -> Variant:
 	if args.is_empty():
-		output("[ERROR] Se requiere mínimo 1 argumento: load [RUTA]")
+		output("[FATAL] Se requiere mínimo 1 argumento: load [RUTA]", ConsoleManager.OutputType.FATAL)
 		return null
 
 	var reference := str(args[0]).strip_edges()
 
 	if reference.is_empty():
-		output("[ERROR] La ruta no puede estar vacía")
+		output("[ERROR] La ruta no puede estar vacía", ConsoleManager.OutputType.ERROR)
 		return null
 
 	var route = resolve_route(reference, null)
 
 	if route == null:
-		output("[ERROR] Ruta no encontrada: " + reference)
+		output("[ERROR] Ruta no encontrada: " + reference, ConsoleManager.OutputType.ERROR)
 		return null
 
 	if route is Node:
@@ -115,11 +138,11 @@ func execute_load(args: Array) -> Variant:
 ## Carga el contenido de un archivo según su extensión.
 func _load_file(path: String) -> Variant:
 	if DirAccess.dir_exists_absolute(path):
-		output("[ERROR] La ruta es un directorio: " + path)
+		output("[ERROR] La ruta es un directorio: " + path, ConsoleManager.OutputType.ERROR)
 		return null
 
 	if not FileAccess.file_exists(path):
-		output("[ERROR] Archivo no encontrado: " + path)
+		output("[ERROR] Archivo no encontrado: " + path, ConsoleManager.OutputType.ERROR)
 		return null
 
 	var extension := path.get_extension().to_lower()
@@ -130,7 +153,8 @@ func _load_file(path: String) -> Variant:
 		if resource == null:
 			output(
 				"[ERROR] No se pudo cargar el recurso: "
-				+ path
+				+ path,
+				ConsoleManager.OutputType.ERROR
 			)
 			return null
 
@@ -141,7 +165,8 @@ func _load_file(path: String) -> Variant:
 	if file == null:
 		output(
 			"[ERROR] No se pudo abrir el archivo: "
-			+ path
+			+ path,
+			ConsoleManager.OutputType.ERROR
 		)
 		return null
 
@@ -231,8 +256,8 @@ func execute_cd(args: Array) -> Variant:
 
 			output(
 				"[ERROR] No es un directorio: "
-				+ filesystem_target
-			)
+				+ filesystem_target,
+			ConsoleManager.OutputType.ERROR)
 			return null
 
 	# Intentar resolver una ruta absoluta.
@@ -249,13 +274,13 @@ func execute_cd(args: Array) -> Variant:
 
 	if resolved is String:
 		if not DirAccess.dir_exists_absolute(resolved):
-			output("[ERROR] No es un directorio: " + reference)
+			output("[ERROR] No es un directorio: " + reference, ConsoleManager.OutputType.ERROR)
 			return null
 
 		logical_route = resolved
 		return resolved
 
-	output("[ERROR] La referencia no es navegable")
+	output("[ERROR] La referencia no es navegable", ConsoleManager.OutputType.ERROR)
 	return null
 
 
@@ -269,7 +294,7 @@ func execute_ls(args: Array) -> Variant:
 		target = resolve_route(str(args[0]), null)
 
 	if target == null:
-		output("[ERROR] Ruta no encontrada")
+		output("[FATAL] Ruta no encontrada", ConsoleManager.OutputType.FATAL)
 		return null
 
 	# Listar hijos de un Node.
@@ -287,13 +312,13 @@ func execute_ls(args: Array) -> Variant:
 		var path := str(target)
 
 		if not DirAccess.dir_exists_absolute(path):
-			output("[ERROR] No es un directorio: " + path)
+			output("[ERROR] No es un directorio: " + path, ConsoleManager.OutputType.ERROR)
 			return null
 
 		var directory := DirAccess.open(path)
 
 		if directory == null:
-			output("[ERROR] No se pudo abrir: " + path)
+			output("[ERROR] No se pudo abrir: " + path, ConsoleManager.OutputType.ERROR)
 			return null
 
 		var entries: Array[String] = []
@@ -318,7 +343,7 @@ func execute_ls(args: Array) -> Variant:
 
 		return entries
 
-	output("[ERROR] La ruta no puede ser listada")
+	output("[ERROR] La ruta no puede ser listada", ConsoleManager.OutputType.ERROR)
 	return null
 
 
@@ -341,14 +366,14 @@ func execute_pwd(args: Array) -> Variant:
 				use_physical = true
 
 			_:
-				output("[ERROR] Opción desconocida: " + option)
+				output("[ERROR] Opción desconocida: " + option, ConsoleManager.OutputType.ERROR)
 				return null
 
 	if use_physical:
 		var physical_route := get_physical_route()
 
 		if physical_route.is_empty():
-			output("[ERROR] No se pudo resolver la ruta física")
+			output("[ERROR] No se pudo resolver la ruta física", ConsoleManager.OutputType.ERROR)
 			return null
 
 		output(physical_route)
@@ -360,8 +385,8 @@ func execute_pwd(args: Array) -> Variant:
 
 ## Envía texto al canal de salida.
 ## Más adelante puede convertirse en una señal conectada a ConsoleManager.
-func output(text: String) -> void:
-	console_manager.console_output(text)
+func output(text: String, type : ConsoleManager.OutputType = ConsoleManager.OutputType.LOG) -> void:
+	console_manager.console_output(text, type)
 
 
 ## Resuelve una referencia sin ejecutarla ni cargarla.
@@ -394,13 +419,21 @@ func resolve_route(
 
 ## Comprueba si la ruta pertenece al filesystem del juego.
 func _is_filesystem_path(path: String) -> bool:
-	if not (
+
+	if (
 		path.begins_with("res://")
 		or path.begins_with("user://")
 	):
-		return false
+		return (
+			FileAccess.file_exists(path)
+			or DirAccess.dir_exists_absolute(path)
+		)
 
-	return (
-		FileAccess.file_exists(path)
-		or DirAccess.dir_exists_absolute(path)
-	)
+	# Rutas absolutas del sistema operativo.
+	if path.begins_with("/"):
+		return (
+			FileAccess.file_exists(path)
+			or DirAccess.dir_exists_absolute(path)
+		)
+
+	return false

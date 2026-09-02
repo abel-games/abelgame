@@ -3,18 +3,8 @@ extends Node
 class_name PackageManager
 
 @export var console_manager : ConsoleManager
-var packages : Array[PackedPackage] = []
+@export var packages : Array[NodePath] = []
 
-enum PackageAction {
-	NONE,
-	SEARCH,
-	INSTALL,
-	UPDATE,
-	UPGRADE
-}
-
-
-var actual_action: PackageAction = PackageAction.NONE
 
 @onready var hr: HTTPRequest = $HR
 
@@ -23,7 +13,14 @@ var actual_action: PackageAction = PackageAction.NONE
 }
 
 func _ready() -> void:
-	pass
+	var pdata = {
+		"cm" : console_manager,
+		"rfm" : console_manager.route_file_manager
+	}
+	for package in packages:
+		var node := get_node(package)
+		if node:
+			(node as PackedPackage).give_data(pdata)
 
 func output(value: Variant) -> void:
 	console_manager.console_output(str(value))
@@ -132,8 +129,6 @@ func _handle_search_result(
 	response_code: int,
 	body: PackedByteArray
 ) -> void:
-	actual_action = PackageAction.NONE
-
 	if result != HTTPRequest.RESULT_SUCCESS:
 		output("No se pudo obtener el paquete. Error de conexión.")
 		return

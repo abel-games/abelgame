@@ -12,7 +12,9 @@
 [ext_resource type="Script" uid="uid://ckavp7nf0ljbx" path="res://scripts/button.gd" id="4_1bvp3"]
 [ext_resource type="Texture2D" uid="uid://sk4u0das5ng3" path="res://assets/brickwall.jpg" id="4_4c57u"]
 [ext_resource type="Script" uid="uid://dxppa7g5tgukh" path="res://scripts/managers/routefilemanager.gd" id="4_4k2k6"]
+[ext_resource type="Script" uid="uid://jeinqe42anhp" path="res://scene/cab_executer.gd" id="4_7xrs8"]
 [ext_resource type="Shader" uid="uid://dphseupgowu13" path="res://shaders/other.gdshader" id="4_82xsv"]
+[ext_resource type="Script" uid="uid://ce5oq7pbx60o3" path="res://shaders/classes/version.gd" id="5_kpobt"]
 [ext_resource type="Script" uid="uid://crd113gs834v4" path="res://scripts/inventory.gd" id="7_5vw27"]
 [ext_resource type="PackedScene" uid="uid://tcoelb75l1h4" path="res://scene/item_slot.tscn" id="7_272bh"]
 [ext_resource type="Texture2D" uid="uid://dasoq4xgfndk3" path="res://assets/background_soul.png" id="9_bmc2w"]
@@ -48,6 +50,10 @@ sky_material = SubResource("ProceduralSkyMaterial_jq2sk")
 background_mode = 2
 sky = SubResource("Sky_4k2k6")
 glow_enabled = true
+
+[sub_resource type="Resource" id="Resource_g7b7a"]
+script = ExtResource("5_kpobt")
+metadata/_custom_type_script = "uid://ce5oq7pbx60o3"
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_w48qg"]
 render_priority = 0
@@ -283,8 +289,17 @@ package_manager = NodePath("../PackageManager")
 [node name="PackageManager" type="Node" parent="." unique_id=1006013931 node_paths=PackedStringArray("console_manager")]
 script = ExtResource("3_seu75")
 console_manager = NodePath("../ConsoleManager")
+packages = Array[NodePath]([NodePath("CABExecuter")])
 
 [node name="HR" type="HTTPRequest" parent="PackageManager" unique_id=1516035288]
+download_file = "user://hr.txt"
+
+[node name="CABExecuter" type="Node" parent="PackageManager" unique_id=1108750517]
+script = ExtResource("4_7xrs8")
+pkg_name = "cab"
+pkg_description = "It's the interpreter and executer of .cab files use console_manager for fun .cab"
+version = SubResource("Resource_g7b7a")
+metadata/_custom_type_script = "uid://bn1auc8yghj6k"
 
 [node name="RouteFileManager" type="Node" parent="." unique_id=289283744 node_paths=PackedStringArray("console_manager", "home")]
 script = ExtResource("4_4k2k6")
