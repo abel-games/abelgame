@@ -37,6 +37,9 @@ var command_buffer_active: bool = false
 var structure_buffer: String = ""
 var structure_buffer_active: bool = false
 
+## Límite de seguridad para evitar que un CAB defectuoso bloquee el hilo principal.
+@export_range(1, 1000000, 1) var max_loop_iterations: int = 10000
+
 
 @export var package_manager: PackageManager
 
@@ -57,9 +60,14 @@ class TCommandCall:
 ## Se analiza sin ejecutarlo y se ejecuta cuando el comando padre lo solicite.
 class TCommandBlock:
 	var t_commands: Array = []
+	var t_source: String = ""
 
-	func _init(_t_commands: Array = []) -> void:
+	func _init(
+		_t_commands: Array = [],
+		_t_source: String = ""
+	) -> void:
 		t_commands = _t_commands
+		t_source = _t_source
 
 
 ## Cláusula opcional de una estructura encadenable.
@@ -127,9 +135,9 @@ func console_output(
 	t_value: Variant,
 	type: OutputType = OutputType.LOG
 ) -> void:
-	var message := str(t_value)
+	var message = str(t_value)
 
-	var color := Color.WHITE
+	var color = Color.WHITE
 
 	match type:
 		OutputType.DEBUG:
@@ -147,12 +155,19 @@ func console_output(
 		OutputType.LOG:
 			color = Color.WHITE
 
-	var formatted := "[color=%s]%s[/color]" % [
+	var formatted = "[color=%s]%s[/color]" % [
 		color.to_html(),
 		message
 	]
 
 	output.emit(formatted)
+
+
+## Emite información de depuración solamente cuando variables["debug"] sea true.
+## Esto permite depurar parser, AST y ejecución sin llenar la consola normalmente.
+func debug_output(t_value: Variant) -> void:
+	if bool(variables.get("debug", false)):
+		console_output(t_value, OutputType.DEBUG)
 #endregion
 
 #region Contexto
@@ -218,7 +233,7 @@ func _strip_braces(t_text: String) -> String:
 #region Auxiliares
 
 func _process_wr_text(t_text: String) -> String:
-	var t_result := _strip_braces(t_text)
+	var t_result = _strip_braces(t_text)
 
 	# Permite escribir saltos de línea con \n	# sin perder los saltos reales que ya existan dentro del bloque.
 	return t_result.replace("\\n", "\n")
@@ -266,7 +281,7 @@ func _get_member(
 		if not t_member.is_valid_int():
 			return NoResult.new()
 
-		var t_index := int(t_member)
+		var t_index = int(t_member)
 		var t_array: Array = t_container
 
 		if t_index < 0 or t_index >= t_array.size():
@@ -299,7 +314,7 @@ func _set_member(
 		if not t_member.is_valid_int():
 			return false
 
-		var t_index := int(t_member)
+		var t_index = int(t_member)
 		var t_array: Array = t_container
 
 		if t_index < 0 or t_index >= t_array.size():
@@ -350,7 +365,7 @@ func _resolve_property_parent(
 	t_base: Variant,
 	t_chain: String
 ) -> Dictionary:
-	var t_parts := t_chain.split(":")
+	var t_parts = t_chain.split(":")
 
 	if t_parts.is_empty():
 		return {"t_error": true}
@@ -358,7 +373,7 @@ func _resolve_property_parent(
 	var t_current: Variant = t_base
 
 	for t_index in range(t_parts.size() - 1):
-		var t_part := t_parts[t_index].strip_edges()
+		var t_part = t_parts[t_index].strip_edges()
 
 		if t_part.is_empty():
 			continue
@@ -426,45 +441,64 @@ func _resolve_reference(t_text: String) -> Variant:
 
 
 func _looks_like_expression(t_text: String) -> bool:
+	t_text = t_text.strip_edges()
+
 	if t_text.is_empty():
 		return false
 
 	if t_text.begins_with("\"") and t_text.ends_with("\""):
 		return false
 
-	if (
-		t_text == "null"
-		or t_text == "true"
-		or t_text == "false"
-	):
-		return false
-
-	if t_text == "@":
+	if t_text in ["null", "true", "false", "@"]:
 		return false
 
 	for t_character in [
-		"+",
-		"-",
-		"*",
-		"/",
-		"%",
-		"(",
-		")",
-		".",
-		",",
-		"[",
-		"]",
-		"{",
-		"}"
+		"+", "-", "*", "/", "%",
+		"(", ")", ".", ",", "[", "]", "{", "}",
+		"<", ">", "=", "!", "&", "|"
 	]:
 		if t_text.find(t_character) != -1:
+			return true
+
+	for t_operator in [" in ", " not ", " and ", " or "]:
+		if t_operator in t_text:
 			return true
 
 	return false
 
 
+const EXPRESSION_LAST_NAME := "__cab_last_value"
+
+
 func preprocess_expression(t_text: String) -> String:
-	return t_text.replace("@", "last")
+	# Sustituye @ solamente fuera de cadenas.
+	# Así `"@"` permanece literalmente `"@"`.
+	var t_result := ""
+	var t_quote := false
+	var t_escaped := false
+
+	for t_character in t_text:
+		if t_escaped:
+			t_result += t_character
+			t_escaped = false
+			continue
+
+		if t_character == "\\":
+			t_result += t_character
+			t_escaped = true
+			continue
+
+		if t_character == "\"":
+			t_quote = not t_quote
+			t_result += t_character
+			continue
+
+		if not t_quote and t_character == "@":
+			t_result += EXPRESSION_LAST_NAME
+		else:
+			t_result += t_character
+
+	return t_result
 
 
 func _get_expression_inputs() -> Dictionary:
@@ -472,12 +506,16 @@ func _get_expression_inputs() -> Dictionary:
 	var t_values: Array = []
 
 	for t_name in variables:
-		t_names.append(str(t_name))
+		var t_name_string := str(t_name)
+		if t_name_string == EXPRESSION_LAST_NAME:
+			continue
+		t_names.append(t_name_string)
 		t_values.append(variables[t_name])
 
-	if not variables.has("last"):
-		t_names.append("last")
-		t_values.append(last_value)
+	# `@` usa siempre este binding reservado, incluso si el usuario
+	# tiene una variable llamada `last`.
+	t_names.append(EXPRESSION_LAST_NAME)
+	t_values.append(last_value)
 
 	return {
 		"names": t_names,
@@ -486,19 +524,20 @@ func _get_expression_inputs() -> Dictionary:
 
 
 func evaluate_expression(t_text: String) -> Variant:
-	var t_expression := Expression.new()
-	var t_parsed_text := preprocess_expression(t_text)
-	var t_inputs := _get_expression_inputs()
+	var t_expression = Expression.new()
+	var t_parsed_text = preprocess_expression(t_text)
+	var t_inputs = _get_expression_inputs()
 
-	var t_error := t_expression.parse(
+	var t_error = t_expression.parse(
 		t_parsed_text,
 		t_inputs["names"]
 	)
 
 	if t_error != OK:
+		console_output("[ERROR] Expresión inválida: %s" % t_expression.get_error_text(), OutputType.ERROR)
 		return NoResult.new()
 
-	var t_context := ConsoleContext.new(
+	var t_context = ConsoleContext.new(
 		last_value,
 		_current_context(),
 		variables
@@ -510,6 +549,7 @@ func evaluate_expression(t_text: String) -> Variant:
 	)
 
 	if t_expression.has_execute_failed():
+		console_output("[ERROR] Falló la ejecución de la expresión: %s" % t_expression.get_error_text(), OutputType.ERROR)
 		return NoResult.new()
 
 	return t_result
@@ -519,15 +559,16 @@ func evaluate_expression(t_text: String) -> Variant:
 #region Parser y expresiones
 
 func evaluate_raw_expression(t_text: String) -> Variant:
-	var t_expression := Expression.new()
-	var t_inputs := _get_expression_inputs()
+	var t_expression = Expression.new()
+	var t_inputs = _get_expression_inputs()
 
-	var t_error := t_expression.parse(
+	var t_error = t_expression.parse(
 		t_text,
 		t_inputs["names"]
 	)
 
 	if t_error != OK:
+		console_output("[ERROR] Expresión inválida: %s" % t_expression.get_error_text(), OutputType.ERROR)
 		return NoResult.new()
 
 	var t_result = t_expression.execute(
@@ -540,6 +581,7 @@ func evaluate_raw_expression(t_text: String) -> Variant:
 	)
 
 	if t_expression.has_execute_failed():
+		console_output("[ERROR] Falló la ejecución de la expresión: %s" % t_expression.get_error_text(), OutputType.ERROR)
 		return NoResult.new()
 
 	return t_result
@@ -636,12 +678,16 @@ func _parse_argument(
 		}
 
 	if t_raw:
+		var t_raw_value: String = t_tokens[t_index]
+		debug_output(
+			"_parse_argument: RAW -> %s" % t_raw_value
+		)
 		return {
-			"value": t_tokens[t_index],
+			"value": t_raw_value,
 			"next_index": t_index + 1
 		}
 
-	var t_token := t_tokens[t_index]
+	var t_token = t_tokens[t_index]
 
 	if t_token in commands:
 		return _parse_command_call(
@@ -678,7 +724,7 @@ func _parse_structured_part(
 	var t_text_args: Dictionary = t_data.get("text_args", {})
 
 	var t_args: Array = []
-	var t_current_index := t_index
+	var t_current_index = t_index
 
 	for t_argument_index in range(t_args_count):
 		if t_current_index >= t_end:
@@ -689,7 +735,7 @@ func _parse_structured_part(
 			}
 
 		if t_argument_index in t_call_args:
-			var t_nested_result := _parse_nested_command(
+			var t_nested_result = _parse_nested_command(
 				t_tokens,
 				t_current_index,
 				t_end
@@ -707,7 +753,7 @@ func _parse_structured_part(
 			continue
 
 		if t_argument_index in t_block_args:
-			var t_block_token := t_tokens[t_current_index]
+			var t_block_token = t_tokens[t_current_index]
 
 			if not _is_brace_block(t_block_token):
 				return {
@@ -728,8 +774,8 @@ func _parse_structured_part(
 			t_current_index += 1
 			continue
 
-		var t_is_raw := t_argument_index in t_raw
-		var t_parsed := _parse_argument(
+		var t_is_raw = t_argument_index in t_raw
+		var t_parsed = _parse_argument(
 			t_tokens,
 			t_current_index,
 			t_end,
@@ -770,7 +816,7 @@ func _parse_structured_command_call(
 	var t_structure: Dictionary = t_command_data["structure"]
 	var t_head_data: Dictionary = t_structure.get("head", {})
 
-	var t_head := _parse_structured_part(
+	var t_head = _parse_structured_part(
 		t_tokens,
 		t_index + 1,
 		t_end,
@@ -783,16 +829,16 @@ func _parse_structured_command_call(
 			"next_index": t_head["next_index"]
 		}
 
-	var t_call := TCommandCall.new(t_command_name)
+	var t_call = TCommandCall.new(t_command_name)
 	for t_argument in t_head["args"]:
 		t_call.t_args.append(t_argument)
 
 	var t_current_index: int = t_head["next_index"]
 	var t_continuations: Dictionary = t_structure.get("continuations", {})
-	var t_seen_terminal := false
+	var t_seen_terminal = false
 
 	while t_current_index < t_end:
-		var t_keyword := str(t_tokens[t_current_index])
+		var t_keyword = str(t_tokens[t_current_index])
 
 		if not t_continuations.has(t_keyword):
 			break
@@ -804,7 +850,7 @@ func _parse_structured_command_call(
 			}
 
 		var t_clause_data: Dictionary = t_continuations[t_keyword]
-		var t_clause := _parse_structured_part(
+		var t_clause = _parse_structured_part(
 			t_tokens,
 			t_current_index + 1,
 			t_end,
@@ -818,7 +864,7 @@ func _parse_structured_command_call(
 			}
 
 		var t_clause_args: Array = t_clause["args"]
-		var t_block_index := int(t_clause_data.get("block_index", -1))
+		var t_block_index = int(t_clause_data.get("block_index", -1))
 		var t_clause_block: Variant = null
 		var t_condition_args: Array = []
 
@@ -850,6 +896,8 @@ func _parse_structured_command_call(
 func _ready() -> void:
 	var tree: SceneTree = get_tree()
 	variables["tree"] = tree
+	if not variables.has("debug"):
+		variables["debug"] = false
 #endregion
 
 #region Parser
@@ -866,12 +914,12 @@ func _parse_command_call(
 			"next_index": t_index
 		}
 
-	var t_token := t_tokens[t_index]
+	var t_token = t_tokens[t_index]
 
 	if not t_token in commands:
 		return {
-			"value": parse_value(t_token),
-			"next_index": t_index + 1
+			"value": NoResult.new(),
+			"next_index": t_index
 		}
 
 	var t_command_data: Dictionary = commands[t_token]
@@ -890,17 +938,17 @@ func _parse_command_call(
 	var t_call_args: Dictionary = t_command_data.get("call_args", {})
 	var t_block_args: Dictionary = t_command_data.get("block_args", {})
 	var t_text_args: Dictionary = t_command_data.get("text_args", {})
-	var t_call := TCommandCall.new(t_token)
+	var t_call = TCommandCall.new(t_token)
 
 	if t_amount == -1:
 		@warning_ignore("confusable_local_declaration")
-		var t_current_index := t_index + 1
+		var t_current_index = t_index + 1
 
 		while t_current_index < t_end:
-			var t_argument_position := t_current_index - t_index - 1
+			var t_argument_position = t_current_index - t_index - 1
 
 			if t_argument_position in t_call_args:
-				var t_nested_result := _parse_nested_command(
+				var t_nested_result = _parse_nested_command(
 					t_tokens,
 					t_current_index,
 					t_end
@@ -917,7 +965,7 @@ func _parse_command_call(
 				continue
 
 			if t_argument_position in t_block_args:
-				var t_block_token := t_tokens[t_current_index]
+				var t_block_token = t_tokens[t_current_index]
 				if not _is_brace_block(t_block_token):
 					return {
 						"value": NoResult.new(),
@@ -935,8 +983,8 @@ func _parse_command_call(
 				t_current_index += 1
 				continue
 
-			var t_is_raw := t_argument_position in t_raw
-			var t_parsed := _parse_argument(
+			var t_is_raw = t_argument_position in t_raw
+			var t_parsed = _parse_argument(
 				t_tokens,
 				t_current_index,
 				t_end,
@@ -961,14 +1009,14 @@ func _parse_command_call(
 			"next_index": t_current_index
 		}
 
-	var t_current_index := t_index + 1
+	var t_current_index = t_index + 1
 
 	for t_argument_index in range(t_amount):
 		if t_current_index >= t_end:
 			break
 
 		if t_argument_index in t_call_args:
-			var t_nested_result := _parse_nested_command(
+			var t_nested_result = _parse_nested_command(
 				t_tokens,
 				t_current_index,
 				t_end
@@ -982,7 +1030,7 @@ func _parse_command_call(
 			continue
 
 		if t_argument_index in t_block_args:
-			var t_block_token := t_tokens[t_current_index]
+			var t_block_token = t_tokens[t_current_index]
 			if not _is_brace_block(t_block_token):
 				break
 
@@ -994,8 +1042,8 @@ func _parse_command_call(
 			t_current_index += 1
 			continue
 
-		var t_is_raw := t_argument_index in t_raw
-		var t_parsed := _parse_argument(
+		var t_is_raw = t_argument_index in t_raw
+		var t_parsed = _parse_argument(
 			t_tokens,
 			t_current_index,
 			t_end,
@@ -1029,9 +1077,12 @@ func _parse_nested_command(
 			"next_index": t_index
 		}
 
-	var t_token := t_tokens[t_index]
+	var t_token = t_tokens[t_index]
 
 	if _is_brace_block(t_token):
+		debug_output(
+			"_parse_nested_command: %s reconocido como bloque" % t_token
+		)
 		return {
 			"value": _parse_block_token(t_token),
 			"next_index": t_index + 1
@@ -1060,10 +1111,48 @@ func _execute_call(t_call: TCommandCall) -> Variant:
 	]
 
 	var t_function: Callable = t_command_data["func"]
+	if not t_function.is_valid():
+		console_output("[ERROR] Comando sin función ejecutable: %s" % t_call.t_name, OutputType.ERROR)
+		return NoResult.new()
+
+	var t_expected_args: int = int(t_command_data.get("args", -1))
+	if t_expected_args >= 0 and t_call.t_args.size() != t_expected_args:
+		console_output("[ERROR] '%s' recibió %d argumentos; se esperaban %d" % [t_call.t_name, t_call.t_args.size(), t_expected_args], OutputType.ERROR)
+		return NoResult.new()
+
 	var t_runtime_args: Array = []
 
-	for t_argument in t_call.t_args:
+	var t_text_args: Dictionary = t_command_data.get("text_args", {})
+	var t_lazy_args: Dictionary = t_command_data.get("lazy_args", {})
+
+	for t_argument_index in range(t_call.t_args.size()):
+		var t_argument = t_call.t_args[t_argument_index]
+		debug_output(
+			"_execute_call: %s arg[%d] tipo=%s valor=%s" % [
+				t_call.t_name,
+				t_argument_index,
+				str(typeof(t_argument)),
+				str(t_argument)
+			]
+		)
+
 		# Los bloques y llamadas anidadas ya son AST y deben permanecer intactos.
+		# Si por cualquier ruta un AST llega a un argumento textual, recuperamos
+		# el texto fuente en lugar de dejar escapar la instancia RefCounted.
+		if t_argument_index in t_text_args:
+			if t_argument is TCommandBlock:
+				t_runtime_args.append(t_argument.t_source)
+				continue
+			if t_argument is TDeferredValue:
+				t_runtime_args.append(t_argument.t_text)
+				continue
+
+		# Lazy arguments must remain deferred until the command itself resolves them.
+		# `while` uses this for its condition because it must be evaluated every iteration.
+		if t_argument_index in t_lazy_args:
+			t_runtime_args.append(t_argument)
+			continue
+
 		if t_argument is TCommandCall or t_argument is TCommandBlock:
 			t_runtime_args.append(t_argument)
 		else:
@@ -1085,27 +1174,33 @@ func _execute_call(t_call: TCommandCall) -> Variant:
 #region Block Parsing
 
 func _parse_block_token(t_block_token: String) -> Variant:
-	var t_content := _strip_braces(t_block_token)
-	var t_block := TCommandBlock.new()
+	var t_content = _strip_braces(t_block_token)
+	debug_output(
+		"_parse_block_token: creando TCommandBlock para %s" % t_block_token
+	)
+	var t_block = TCommandBlock.new([], t_block_token)
 
-	var t_commands := _split_complete_commands(t_content)
+	var t_commands = _split_complete_commands(t_content)
 
 	for t_text in t_commands:
-		var t_line := t_text.strip_edges()
+		var t_line = t_text.strip_edges()
 		if t_line.is_empty():
 			continue
 
-		var t_tokens := tokenize(t_line)
+		var t_tokens = tokenize(t_line)
 		if t_tokens.is_empty():
 			continue
 
-		var t_parsed := _parse_command_call(
+		var t_parsed = _parse_command_call(
 			t_tokens,
 			0,
 			t_tokens.size()
 		)
 
 		if t_parsed["value"] is NoResult:
+			return NoResult.new()
+
+		if t_parsed["next_index"] != t_tokens.size():
 			return NoResult.new()
 
 		if t_parsed["value"] is TCommandCall:
@@ -1159,20 +1254,20 @@ func _get_structure_continuation_names() -> Dictionary:
 
 
 func _starts_structure_continuation(t_text: String) -> bool:
-	var t_tokens := tokenize(t_text.strip_edges())
+	var t_tokens = tokenize(t_text.strip_edges())
 	if t_tokens.is_empty():
 		return false
 
-	var t_keyword := str(t_tokens[0])
+	var t_keyword = str(t_tokens[0])
 	return t_keyword in _get_structure_continuation_names()
 
 
 func _command_can_have_structure_continuation(t_text: String) -> bool:
-	var t_tokens := tokenize(t_text.strip_edges())
+	var t_tokens = tokenize(t_text.strip_edges())
 	if t_tokens.is_empty():
 		return false
 
-	var t_command_name := str(t_tokens[0])
+	var t_command_name = str(t_tokens[0])
 	if not commands.has(t_command_name):
 		return false
 
@@ -1183,13 +1278,13 @@ func _command_can_have_structure_continuation(t_text: String) -> bool:
 ## continuaciones estructurales aunque estén en otra línea.
 func _split_complete_commands(t_text: String) -> Array[String]:
 	var t_raw_result: Array[String] = []
-	var t_start := 0
-	var t_braces := 0
-	var t_quote := false
-	var t_escaped := false
+	var t_start = 0
+	var t_braces = 0
+	var t_quote = false
+	var t_escaped = false
 
 	for t_index in range(t_text.length()):
-		var t_character := t_text[t_index]
+		var t_character = t_text[t_index]
 
 		if t_escaped:
 			t_escaped = false
@@ -1213,7 +1308,7 @@ func _split_complete_commands(t_text: String) -> Array[String]:
 				t_braces = maxi(0, t_braces - 1)
 			"\n":
 				if t_braces == 0:
-					var t_command := t_text.substr(
+					var t_command = t_text.substr(
 						t_start,
 						t_index - t_start
 					)
@@ -1221,14 +1316,14 @@ func _split_complete_commands(t_text: String) -> Array[String]:
 						t_raw_result.append(t_command)
 					t_start = t_index + 1
 
-	var t_tail := t_text.substr(t_start)
+	var t_tail = t_text.substr(t_start)
 	if not t_tail.strip_edges().is_empty():
 		t_raw_result.append(t_tail)
 
 	var t_result: Array[String] = []
 
 	for t_command in t_raw_result:
-		var t_text_command := t_command.strip_edges()
+		var t_text_command = t_command.strip_edges()
 		if t_text_command.is_empty():
 			continue
 
@@ -1254,9 +1349,9 @@ func _split_complete_commands(t_text: String) -> Array[String]:
 
 #region que es esta wea
 func _has_unclosed_block(t_text: String) -> bool:
-	var t_braces := 0
-	var t_quote := false
-	var t_escaped := false
+	var t_braces = 0
+	var t_quote = false
+	var t_escaped = false
 
 	for t_character in t_text:
 		if t_escaped:
@@ -1287,6 +1382,13 @@ func _has_unclosed_block(t_text: String) -> bool:
 
 #region Execution Entry Points
 
+## Ejecuta CAB usando las tres etapas públicas:
+## String -> lex() -> parse_ast() -> execute_ast().
+##
+## `execute()` es la entrada principal para la consola interactiva.
+## Flujo explícito disponible: lex() -> parse_ast() -> execute_ast().
+## Para archivos CAB completos se recomienda separar estas etapas y evitar
+## los buffers interactivos de execute().
 func _flush_structure_buffer() -> void:
 	if structure_buffer.is_empty():
 		structure_buffer_active = false
@@ -1296,23 +1398,17 @@ func _flush_structure_buffer() -> void:
 	structure_buffer = ""
 	structure_buffer_active = false
 
-	var t_commands := _split_complete_commands(t_pending)
-	for t_command_text in t_commands:
-		var t_text := t_command_text.strip_edges()
-		if t_text.is_empty():
-			continue
+	var t_ast := parse_ast(lex(t_pending))
+	if t_ast is NoResult:
+		return
 
-		var t_tokens := tokenize(t_text)
-		if t_tokens.is_empty():
-			continue
-
-		var t_result = await parse_command(t_tokens)
-		if not (t_result is NoResult):
-			last_value = t_result
+	var t_result := await execute_ast(t_ast)
+	if not (t_result is NoResult):
+		last_value = t_result
 
 
 func _input_starts_structure_continuation(t_command: String) -> bool:
-	var t_commands := _split_complete_commands(t_command)
+	var t_commands = _split_complete_commands(t_command)
 	if t_commands.is_empty():
 		return false
 
@@ -1325,7 +1421,7 @@ func _has_potential_structure_continuation(
 	if t_tokens.is_empty():
 		return false
 
-	var t_command_name := str(t_tokens[0])
+	var t_command_name = str(t_tokens[0])
 	if not commands.has(t_command_name):
 		return false
 
@@ -1347,12 +1443,12 @@ func _has_potential_structure_continuation(
 	# Las posiciones que siguen al head son las cláusulas ya presentes
 	# en esta entrada. Si existe una cláusula terminal (por ejemplo else),
 	# ya no hay nada que esperar.
-	var t_first_clause_index := 1 + t_head_args
+	var t_first_clause_index = 1 + t_head_args
 	for t_index in range(
 		t_first_clause_index,
 		t_tokens.size()
 	):
-		var t_keyword := str(t_tokens[t_index])
+		var t_keyword = str(t_tokens[t_index])
 		if not t_continuations.has(t_keyword):
 			continue
 
@@ -1376,7 +1472,66 @@ func execute(t_command: String) -> int:
 		else:
 			await _flush_structure_buffer()
 
-	# `;` sigue siendo un separador opcional fuera de bloques y comillas.
+	var t_normalized := _normalize_source(t_command)
+
+	if not command_buffer.is_empty():
+		command_buffer += "\n"
+
+	command_buffer += t_normalized
+
+	var t_commands := _split_complete_commands(command_buffer)
+	command_buffer = ""
+	command_buffer_active = false
+
+	var t_complete_texts: Array[String] = []
+
+	for t_index in range(t_commands.size()):
+		var t_command_text: String = t_commands[t_index]
+		var t_text := t_command_text.strip_edges()
+		if t_text.is_empty():
+			continue
+
+		if _has_unclosed_block(t_text):
+			command_buffer = t_text
+			command_buffer_active = true
+			continue
+
+		t_complete_texts.append(t_text)
+
+	var t_lexed := lex("\n".join(t_complete_texts))
+	var t_ast := parse_ast(t_lexed)
+
+	if t_ast is NoResult:
+		return 0
+
+	# Una estructura sin cláusula terminal puede necesitar la siguiente línea
+	# en la consola interactiva. No aplica al parser de archivos: parse_ast()
+	# siempre devuelve el AST completo disponible.
+	if t_complete_texts.size() > 0 and t_lexed.size() > 0:
+		var t_last_text := t_complete_texts[t_complete_texts.size() - 1]
+		var t_last_tokens: PackedStringArray = t_lexed[t_lexed.size() - 1]
+		if (
+				_command_can_have_structure_continuation(t_last_text)
+				and _has_potential_structure_continuation(t_last_tokens)
+		):
+			# Separa el último comando del AST ejecutable; así no se ejecuta
+			# hasta que llegue elsif/else o una nueva entrada cierre la estructura.
+			if t_ast is TCommandBlock and t_ast.t_commands.size() > 0:
+				t_ast.t_commands.pop_back()
+				structure_buffer = t_last_text
+				structure_buffer_active = true
+			
+				if t_ast.t_commands.is_empty():
+					return 0
+
+	if t_ast is TCommandBlock and t_ast.t_commands.is_empty():
+		return 0
+
+	await execute_ast(t_ast)
+	return 0
+
+
+func _normalize_source(t_command: String) -> String:
 	var t_normalized := ""
 	var t_quote := false
 	var t_escaped := false
@@ -1393,7 +1548,7 @@ func execute(t_command: String) -> int:
 			t_escaped = true
 			continue
 
-		if t_character == "\"":
+		if t_character == '"':
 			t_quote = not t_quote
 			t_normalized += t_character
 			continue
@@ -1409,53 +1564,74 @@ func execute(t_command: String) -> int:
 
 		t_normalized += t_character
 
-	if not command_buffer.is_empty():
-		command_buffer += "\n"
+	return t_normalized
 
-	command_buffer += t_normalized
 
-	var t_commands := _split_complete_commands(command_buffer)
+## Léxer público.
+## Divide el texto en comandos completos y tokeniza cada comando.
+## El resultado conserva los límites de comando para que parse_ast() pueda
+## trabajar exclusivamente con tokens, sin volver a dividir texto fuente.
+func lex(t_text: String) -> Array:
+	t_text = _normalize_source(t_text)
 
-	command_buffer = ""
-	command_buffer_active = false
+	var t_commands: Array[String]
+	if t_text.is_empty():
+		t_commands = []
+	else:
+		t_commands = _split_complete_commands(t_text)
 
-	for t_index in range(t_commands.size()):
-		var t_command_text: String = t_commands[t_index]
-		var t_text := t_command_text.strip_edges()
-		if t_text.is_empty():
+	var t_result: Array = []
+
+	for t_command_text in t_commands:
+		var t_text_command := t_command_text.strip_edges()
+		if t_text_command.is_empty():
 			continue
 
-		if _has_unclosed_block(t_text):
-			command_buffer = t_text
-			command_buffer_active = true
-			continue
+		if _has_unclosed_block(t_text_command):
+			console_output("[ERROR] El texto CAB contiene un bloque sin cerrar", OutputType.ERROR)
+			return []
 
-		var t_tokens := tokenize(t_text)
+		var t_tokens := tokenize(t_text_command)
+		if not t_tokens.is_empty():
+			t_result.append(t_tokens)
+
+	return t_result
+
+
+## Parser público.
+## Convierte el resultado de lex() en el AST, sin ejecutar absolutamente nada.
+func parse_ast(t_lexed: Array) -> Variant:
+	var t_block := TCommandBlock.new()
+
+	for t_tokens_value in t_lexed:
+		if not t_tokens_value is PackedStringArray:
+			console_output("[ERROR] parse_ast recibió una lista de tokens inválida", OutputType.ERROR)
+			return NoResult.new()
+
+		var t_tokens: PackedStringArray = t_tokens_value
 		if t_tokens.is_empty():
 			continue
 
-		# Si es la última entrada completa y la estructura admite continuación,
-		# la retenemos para que una próxima entrada pueda aportar elsif/else.
-		if (
-				t_index == t_commands.size() - 1
-				and _command_can_have_structure_continuation(t_text)
-				and _has_potential_structure_continuation(t_tokens)
-		):
-			structure_buffer = t_text
-			structure_buffer_active = true
-			continue
+		var t_parsed := _parse_command_ast(t_tokens, 0)
+		if t_parsed is NoResult:
+			return NoResult.new()
 
-		var t_result = await parse_command(t_tokens)
-		if not (t_result is NoResult):
-			last_value = t_result
+		if not t_parsed is TCommandCall:
+			return NoResult.new()
 
-	return 0
+		t_block.t_commands.append(t_parsed)
+
+	return t_block
 
 
-func parse_command(
+## Parsea un único comando a AST, sin ejecutarlo.
+func _parse_command_ast(
 	t_tokens: PackedStringArray,
-	t_index := 0
+	t_index: int = 0
 ) -> Variant:
+	if t_index < 0 or t_index >= t_tokens.size():
+		return NoResult.new()
+
 	var t_parsed := _parse_command_call(
 		t_tokens,
 		t_index,
@@ -1466,15 +1642,255 @@ func parse_command(
 		return NoResult.new()
 
 	var t_call = t_parsed["value"]
-
 	if not t_call is TCommandCall:
-		return t_call
+		var t_unknown := str(t_tokens[t_index])
+		console_output(
+			"[ERROR] Comando desconocido: %s" % t_unknown,
+			OutputType.ERROR
+		)
+		return NoResult.new()
 
-	return await _execute_call(t_call)
+	if t_parsed["next_index"] != t_tokens.size():
+		console_output(
+			"[ERROR] Argumentos sobrantes después de '%s'" % t_call.t_name,
+			OutputType.ERROR
+		)
+		return NoResult.new()
 
+	return t_call
+
+
+## Ejecuta un AST ya construido. No hace lexing ni parsing.
+func execute_ast(t_ast: Variant) -> Variant:
+	if t_ast is TCommandBlock:
+		return await _execute_block(t_ast)
+	if t_ast is TCommandCall:
+		return await _execute_call(t_ast)
+
+	console_output("[ERROR] execute_ast recibió un AST inválido", OutputType.ERROR)
+	return NoResult.new()
+
+
+## Compatibilidad con la API anterior. Ahora parsea, no ejecuta.
+func parse_command(
+	t_tokens: PackedStringArray,
+	t_index: int = 0
+) -> Variant:
+	return _parse_command_ast(t_tokens, t_index)
+
+
+## Compatibilidad: parse_text() ahora es simplemente lex() + parse_ast().
+func parse_text(t_text: String) -> Variant:
+	if _has_unclosed_block(t_text):
+		console_output("[ERROR] El texto CAB contiene un bloque sin cerrar", OutputType.ERROR)
+		return NoResult.new()
+
+	return parse_ast(lex(t_text))
+
+
+## Compatibilidad: ejecuta un AST ya construido.
+func execute_call_block(t_value: Variant) -> Variant:
+	return await execute_ast(t_value)
 
 #endregion
 
+#region AST Serialization
+
+const AST_STORE_MAGIC := "CABSTORE"
+const AST_STORE_VERSION := 1
+
+
+## Convierte el AST en una estructura compuesta únicamente por Variants básicos.
+## Eso permite usar store_var() sin serializar instancias de clases internas.
+func _ast_encode(t_value: Variant) -> Variant:
+	if t_value is TCommandCall:
+		var t_call: TCommandCall = t_value
+		var t_args: Array = []
+		for t_argument in t_call.t_args:
+			t_args.append(_ast_encode(t_argument))
+		return {
+			"type": "call",
+			"name": t_call.t_name,
+			"args": t_args
+		}
+
+	if t_value is TCommandBlock:
+		var t_block: TCommandBlock = t_value
+		var t_commands: Array = []
+		for t_command in t_block.t_commands:
+			t_commands.append(_ast_encode(t_command))
+		return {
+			"type": "block",
+			"source": t_block.t_source,
+			"commands": t_commands
+		}
+
+	if t_value is TStructureClause:
+		var t_clause: TStructureClause = t_value
+		var t_clause_args: Array = []
+		for t_argument in t_clause.t_args:
+			t_clause_args.append(_ast_encode(t_argument))
+		return {
+			"type": "structure_clause",
+			"name": t_clause.t_name,
+			"args": t_clause_args,
+			"block": _ast_encode(t_clause.t_block)
+		}
+
+	if t_value is TDeferredValue:
+		var t_deferred: TDeferredValue = t_value
+		return {
+			"type": "deferred",
+			"text": t_deferred.t_text,
+			"expression": t_deferred.t_expression
+		}
+
+	if t_value is Array:
+		var t_array: Array = []
+		for t_item in t_value:
+			t_array.append(_ast_encode(t_item))
+		return t_array
+
+	if t_value is Dictionary:
+		var t_dictionary: Dictionary = {}
+		for t_key in t_value:
+			t_dictionary[t_key] = _ast_encode(t_value[t_key])
+		return t_dictionary
+
+	return t_value
+
+
+## Reconstruye las clases del AST a partir de la representación serializable.
+func _ast_decode(t_value: Variant) -> Variant:
+	if t_value is Array:
+		var t_array: Array = []
+		for t_item in t_value:
+			t_array.append(_ast_decode(t_item))
+		return t_array
+
+	if not t_value is Dictionary:
+		return t_value
+
+	var t_dictionary: Dictionary = t_value
+	var t_type := str(t_dictionary.get("type", ""))
+
+	match t_type:
+		"call":
+			var t_call := TCommandCall.new(
+				str(t_dictionary.get("name", ""))
+			)
+			var t_args_value = t_dictionary.get("args", [])
+			if not t_args_value is Array:
+				return NoResult.new()
+			for t_argument in t_args_value:
+				t_call.t_args.append(_ast_decode(t_argument))
+			return t_call
+
+		"block":
+			var t_block := TCommandBlock.new(
+				[],
+				str(t_dictionary.get("source", ""))
+			)
+			var t_commands_value = t_dictionary.get("commands", [])
+			if not t_commands_value is Array:
+				return NoResult.new()
+			for t_command in t_commands_value:
+				var t_decoded = _ast_decode(t_command)
+				if not t_decoded is TCommandCall:
+					return NoResult.new()
+				t_block.t_commands.append(t_decoded)
+			return t_block
+
+		"structure_clause":
+			var t_clause_args_value = t_dictionary.get("args", [])
+			if not t_clause_args_value is Array:
+				return NoResult.new()
+			var t_clause := TStructureClause.new(
+				str(t_dictionary.get("name", "")),
+				[],
+				_ast_decode(t_dictionary.get("block", null))
+			)
+			for t_argument in t_clause_args_value:
+				t_clause.t_args.append(_ast_decode(t_argument))
+			return t_clause
+
+		"deferred":
+			return TDeferredValue.new(
+				str(t_dictionary.get("text", "")),
+				bool(t_dictionary.get("expression", false))
+			)
+
+	return t_dictionary
+
+
+## Guarda un AST en un archivo .store.
+## El archivo contiene solo Variants serializables, no objetos ejecutables.
+func store_ast(t_ast: Variant, t_path: String) -> bool:
+	if not t_path.to_lower().ends_with(".store"):
+		console_output("[ERROR] store_ast requiere una ruta con extensión .store", OutputType.ERROR)
+		return false
+
+	if not (t_ast is TCommandBlock or t_ast is TCommandCall):
+		console_output("[ERROR] store_ast recibió un AST inválido", OutputType.ERROR)
+		return false
+
+	var t_file := FileAccess.open(t_path, FileAccess.WRITE)
+	if t_file == null:
+		console_output("[ERROR] No se pudo abrir .store para escritura: %s" % t_path, OutputType.ERROR)
+		return false
+
+	var t_data := {
+		"magic": AST_STORE_MAGIC,
+		"version": AST_STORE_VERSION,
+		"ast": _ast_encode(t_ast)
+	}
+
+	var t_ok := t_file.store_var(t_data)
+	t_file.close()
+
+	if not t_ok:
+		console_output("[ERROR] No se pudo guardar el AST: %s" % t_path, OutputType.ERROR)
+	return t_ok
+
+
+## Carga un .store y reconstruye su AST.
+func load_ast(t_path: String) -> Variant:
+	if not t_path.to_lower().ends_with(".store"):
+		console_output("[ERROR] load_ast requiere una ruta con extensión .store", OutputType.ERROR)
+		return NoResult.new()
+
+	if not FileAccess.file_exists(t_path):
+		console_output("[ERROR] No existe el archivo .store: %s" % t_path, OutputType.ERROR)
+		return NoResult.new()
+
+	var t_file := FileAccess.open(t_path, FileAccess.READ)
+	if t_file == null:
+		console_output("[ERROR] No se pudo abrir .store: %s" % t_path, OutputType.ERROR)
+		return NoResult.new()
+
+	var t_data = t_file.get_var(false)
+	var t_read_error: Error = t_file.get_error()
+	t_file.close()
+
+	if t_read_error != OK:
+		console_output("[ERROR] No se pudo leer el .store: %s" % t_path, OutputType.ERROR)
+		return NoResult.new()
+
+	if not t_data is Dictionary:
+		console_output("[ERROR] .store no contiene un contenedor válido", OutputType.ERROR)
+		return NoResult.new()
+
+	if str(t_data.get("magic", "")) != AST_STORE_MAGIC:
+		console_output("[ERROR] Archivo .store inválido", OutputType.ERROR)
+		return NoResult.new()
+
+	if int(t_data.get("version", -1)) != AST_STORE_VERSION:
+		console_output("[ERROR] Versión de .store no compatible: %s" % t_data.get("version"), OutputType.ERROR)
+		return NoResult.new()
+
+	return _ast_decode(t_data.get("ast", null))
+
+#endregion
 #region flujo de variables
 
 func cmd_vget(t_args: Array) -> Variant:
@@ -1485,7 +1901,7 @@ func cmd_vget(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var t_name := str(t_args[0])
+	var t_name = str(t_args[0])
 
 	if not variables.has(t_name):
 		console_output(
@@ -1505,7 +1921,7 @@ func cmd_vset(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var t_name := str(t_args[0])
+	var t_name = str(t_args[0])
 	var t_value: Variant = t_args[1]
 
 	variables[t_name] = t_value
@@ -1532,7 +1948,7 @@ func cmd_new(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var type_name := str(t_args[0]).strip_edges()
+	var type_name = str(t_args[0]).strip_edges()
 
 	if not ClassDB.class_exists(type_name):
 		console_output(
@@ -1627,7 +2043,7 @@ func cmd_set(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var t_endpoint := _resolve_property_parent(
+	var t_endpoint = _resolve_property_parent(
 		t_target,
 		t_property
 	)
@@ -1640,7 +2056,7 @@ func cmd_set(t_args: Array) -> Variant:
 		return NoResult.new()
 
 	var t_parent: Variant = t_endpoint["t_parent"]
-	var t_leaf := str(t_endpoint["t_leaf"])
+	var t_leaf = str(t_endpoint["t_leaf"])
 
 	if not _set_member(
 		t_parent,
@@ -1669,12 +2085,12 @@ func cmd_call(t_args: Array) -> Variant:
 
 	# El contexto siempre tiene prioridad.
 	var t_target: Variant = _current_context()
-	var t_method_index := 0
+	var t_method_index = 0
 
 	# Si el primer argumento no es un método del contexto,
 	# se interpreta como objeto/ruta.
 	if t_args.size() >= 2:
-		var t_first := str(t_args[0])
+		var t_first = str(t_args[0])
 
 		if (
 			t_target is Object
@@ -1701,7 +2117,7 @@ func cmd_call(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var t_method := str(
+	var t_method = str(
 		t_args[t_method_index]
 	)
 
@@ -1753,10 +2169,10 @@ func cmd_emit(t_args: Array) -> Variant:
 		return NoResult.new()
 
 	var t_target: Variant = _current_context()
-	var t_signal_index := 0
+	var t_signal_index = 0
 
 	if t_args.size() >= 2:
-		var t_first := str(t_args[0])
+		var t_first = str(t_args[0])
 
 		if (
 			t_target is Object
@@ -1785,7 +2201,7 @@ func cmd_emit(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var t_signal_name := str(
+	var t_signal_name = str(
 		t_args[t_signal_index]
 	)
 
@@ -1817,18 +2233,30 @@ func cmd_emit(t_args: Array) -> Variant:
 
 #region rfm 1
 func cmd_load(t_args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 	return route_file_manager.execute_load(t_args)
 
 
 func cmd_cd(args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 	return route_file_manager.execute_cd(args)
 
 
 func cmd_ls(args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 	return route_file_manager.execute_ls(args)
 
 
 func cmd_pwd(args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 	return route_file_manager.execute_pwd(args)
 
 #endregion
@@ -1836,6 +2264,10 @@ func cmd_pwd(args: Array) -> Variant:
 #region El Gran pkg
 func cmd_pkg(t_args: Array) -> Variant:
 	var error: Error = Error.ERR_BUG
+
+	if package_manager == null:
+		console_output("[ERROR] PackageManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 
 	if t_args.size() < 1:
 		console_output(
@@ -1873,23 +2305,31 @@ func cmd_pkg(t_args: Array) -> Variant:
 #region rfm 2
 func cmd_rd(t_args: Array) -> Variant:
 	var result = route_file_manager.execute_rd(t_args)
-	if not result:
+	if result == null or result is NoResult:
 		console_output("[ERROR] No se pudo leer archivo", OutputType.ERROR)
-		return
+		return NoResult.new()
 	return result
 
-func cmd_mkdir(t_args) -> Variant:
-	var result = route_file_manager.execute_mkdir(t_args)
-	return result
+func cmd_mkdir(t_args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
+	return route_file_manager.execute_mkdir(t_args)
 
-func cmd_wr(t_args : Array) -> Variant:
-	var result = route_file_manager.execute_wr(t_args)
-	if not result:
-		console_output("[ERROR] No se pudo escribir archivo", OutputType.ERROR)
-		return
-	return result
+func cmd_wr(t_args: Array) -> Variant:
+	if t_args.size() > 1:
+		var t_text: String = str(t_args[1]).strip_edges()
+		if t_text.begins_with("{") and t_text.ends_with("}"):
+			t_args[1] = t_text.substr(1, t_text.length() - 2)
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
+	return route_file_manager.execute_wr(t_args)
 
 func cmd_dl(t_args: Array) -> Variant:
+	if route_file_manager == null:
+		console_output("[ERROR] RouteFileManager no está configurado", OutputType.ERROR)
+		return NoResult.new()
 	return route_file_manager.execute_dl(t_args)
 
 #endregion
@@ -1951,34 +2391,42 @@ func cmd_while(t_args: Array) -> Variant:
 		)
 		return NoResult.new()
 
-	var cnd = t_args[0]
-	var command = t_args[1]
-	var last: Variant = NoResult.new()
+	var t_condition = t_args[0]
+	var t_command = t_args[1]
+	var t_last: Variant = NoResult.new()
+	var t_iterations := 0
+
+	if not (t_command is TCommandCall or t_command is TCommandBlock):
+		console_output("[ERROR] while esperaba un comando o un bloque", OutputType.ERROR)
+		return NoResult.new()
 
 	while true:
-		var ev = _resolve_runtime_value(cnd)
+		var t_evaluated = _resolve_runtime_value(t_condition)
 
-		if ev is NoResult:
+		if t_evaluated is NoResult:
+			console_output("[ERROR] No se pudo evaluar la condición del while", OutputType.ERROR)
 			return NoResult.new()
 
-		if not bool(ev):
+		if t_evaluated is TCommandCall or t_evaluated is TCommandBlock:
+			console_output("[ERROR] La condición de while no puede ser un comando o bloque", OutputType.ERROR)
+			return NoResult.new()
+
+		if not bool(t_evaluated):
 			break
 
-		if command is TCommandBlock:
-			last = await _execute_block(command)
-		elif command is TCommandCall:
-			last = await _execute_call(command)
-		else:
-			console_output(
-				"[ERROR] while esperaba un comando o un bloque",
-				OutputType.ERROR
-			)
+		t_iterations += 1
+		if t_iterations > max_loop_iterations:
+			console_output("[ERROR] while superó el límite de %d iteraciones" % max_loop_iterations, OutputType.ERROR)
 			return NoResult.new()
 
-		# Ceder el control al motor
+		if t_command is TCommandBlock:
+			t_last = await _execute_block(t_command)
+		else:
+			t_last = await _execute_call(t_command)
+
 		await get_tree().process_frame
 
-	return last
+	return t_last
 
 func cmd_repeat(t_args: Array) -> Variant:
 	if t_args.size() != 2:
@@ -2014,6 +2462,10 @@ func cmd_repeat(t_args: Array) -> Variant:
 
 	var t_final_result: Variant = NoResult.new()
 
+	if t_amount > max_loop_iterations:
+		console_output("[ERROR] repeat supera el límite de %d iteraciones" % max_loop_iterations, OutputType.ERROR)
+		return NoResult.new()
+
 	for _t_i in range(t_amount):
 		var t_result: Variant
 		if t_nested is TCommandBlock:
@@ -2023,6 +2475,8 @@ func cmd_repeat(t_args: Array) -> Variant:
 
 		if not (t_result is NoResult):
 			t_final_result = t_result
+
+		await get_tree().process_frame
 
 	return t_final_result
 #endregion
@@ -2052,6 +2506,13 @@ func cmd_if(t_args: Array) -> Variant:
 	if t_condition is NoResult:
 		console_output(
 			"No se pudo evaluar la condición del if",
+			OutputType.ERROR
+		)
+		return NoResult.new()
+
+	if t_condition is TCommandCall or t_condition is TCommandBlock:
+		console_output(
+			"[ERROR] La condición de if no puede ser un comando o bloque",
 			OutputType.ERROR
 		)
 		return NoResult.new()
@@ -2086,6 +2547,13 @@ func cmd_if(t_args: Array) -> Variant:
 				)
 				return NoResult.new()
 
+			if t_clause_condition is TCommandCall or t_clause_condition is TCommandBlock:
+				console_output(
+					"[ERROR] La condición de %s no puede ser un comando o bloque" % t_clause.t_name,
+					OutputType.ERROR
+				)
+				return NoResult.new()
+
 			if bool(t_clause_condition):
 				return await _execute_block_result(
 					t_clause.t_block
@@ -2099,7 +2567,7 @@ func cmd_if(t_args: Array) -> Variant:
 # TU DICCIONARIO `commands` VA AQUÍ SIN CAMBIARLO.
 # ---------------------------------------------------------
 
-var commands := {
+var commands = {
 	"log": {
 		"func": cmd_log,
 		"args": 1,
@@ -2111,7 +2579,7 @@ var commands := {
 	},
 	"pwd": {
 		"func": cmd_pwd,
-		"args": 1,
+		"args": 0,
 		"raw": {0: true}
 	},
 	"rd": {
@@ -2142,17 +2610,17 @@ var commands := {
 	"get": {
 		"func": cmd_get,
 		"args": 2,
-		"raw": {0: true}
+		"raw": {0: true, 1: true}
 	},
 	"pkg": {
 		"func": cmd_pkg,
 		"args": -1,
-		"raw": {}
+		"raw": {0: true}
 	},
 	"set": {
 		"func": cmd_set,
 		"args": 3,
-		"raw": {0: true}
+		"raw": {0: true, 1: true}
 	},
 	"call": {
 		"func": cmd_call,
@@ -2183,11 +2651,13 @@ var commands := {
 		"func": cmd_while,
 		"args": 2,
 		"call_args": {1: true},
-		"block_args": {1: true}
+		"block_args": {1: true},
+		"lazy_args": {0: true}
 	},
 	"new": {
 		"func": cmd_new,
-		"args": -1
+		"args": 1,
+		"raw": {0: true}
 	},
 	"at": {
 		"func": cmd_at,
@@ -2239,55 +2709,54 @@ func tokenize(t_text: String) -> PackedStringArray:
 
 	var t_current := ""
 	var t_quote := false
+	var t_escaped := false
 	var t_parentheses := 0
 	var t_brackets := 0
 	var t_braces := 0
 
 	for t_character in t_text:
-		match t_character:
-			"\"":
-				t_quote = not t_quote
-				t_current += t_character
+		if t_escaped:
+			t_current += t_character
+			t_escaped = false
+			continue
 
-			"(":
-				t_parentheses += 1
-				t_current += t_character
+		if t_character == "\\":
+			t_current += t_character
+			t_escaped = true
+			continue
 
-			")":
-				t_parentheses -= 1
-				t_current += t_character
+		if t_character == "\"":
+			t_quote = not t_quote
+			t_current += t_character
+			continue
 
-			"[":
-				t_brackets += 1
-				t_current += t_character
+		if not t_quote:
+			match t_character:
+				"(":
+					t_parentheses += 1
+				")":
+					t_parentheses = maxi(0, t_parentheses - 1)
+				"[":
+					t_brackets += 1
+				"]":
+					t_brackets = maxi(0, t_brackets - 1)
+				"{":
+					t_braces += 1
+				"}":
+					t_braces = maxi(0, t_braces - 1)
 
-			"]":
-				t_brackets -= 1
-				t_current += t_character
+			if (
+				(t_character == " " or t_character == "\t")
+				and t_parentheses == 0
+				and t_brackets == 0
+				and t_braces == 0
+			):
+				if not t_current.is_empty():
+					t_tokens.append(t_current)
+					t_current = ""
+				continue
 
-			"{":
-				t_braces += 1
-				t_current += t_character
-
-			"}":
-				t_braces -= 1
-				t_current += t_character
-
-			" ":
-				if (
-					not t_quote
-					and t_parentheses == 0
-					and t_brackets == 0
-					and t_braces == 0
-				):
-					if not t_current.is_empty():
-						t_tokens.append(t_current)
-						t_current = ""
-				else:
-					t_current += t_character
-
-			_:
-				t_current += t_character
+		t_current += t_character
 
 	if not t_current.is_empty():
 		t_tokens.append(t_current)
