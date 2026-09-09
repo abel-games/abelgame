@@ -1,0 +1,85 @@
+[gd_scene format=3 uid="uid://by4p80aedllqm"]
+
+[ext_resource type="Script" uid="uid://di7mv0uaho6qa" path="res://scripts/abel.gd" id="1_jcn6o"]
+[ext_resource type="Shader" uid="uid://csgnx46labksa" path="res://shaders/simple_outline.gdshader" id="2_82tj4"]
+[ext_resource type="Shader" uid="uid://dphseupgowu13" path="res://shaders/other.gdshader" id="3_s04wv"]
+[ext_resource type="Texture2D" uid="uid://dasoq4xgfndk3" path="res://assets/background_soul.png" id="4_me1d0"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_w48qg"]
+render_priority = 0
+shader = ExtResource("2_82tj4")
+shader_parameter/weight = 0.05
+shader_parameter/outline_color = Vector3(0, 0, 0)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_82xsv"]
+resource_local_to_scene = true
+render_priority = 0
+shader = ExtResource("3_s04wv")
+shader_parameter/shader_lerp = 0.0
+shader_parameter/light_mode = 0.0
+shader_parameter/ax = ExtResource("4_me1d0")
+shader_parameter/uv_scale = Vector2(4, 4)
+shader_parameter/albedo = Color(0.90833163, 0, 0, 1)
+shader_parameter/smstep = 0.5
+shader_parameter/stepv = 0.25
+shader_parameter/max_l = 0.5
+shader_parameter/normal_multiplier = 0.0
+shader_parameter/uv1_scale = Vector3(1, 1, 1)
+shader_parameter/uv1_offset = Vector3(0, 0, 0)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_7dm0k"]
+material = SubResource("ShaderMaterial_82xsv")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dg77c"]
+render_priority = 0
+shader = ExtResource("2_82tj4")
+shader_parameter/weight = 0.05
+shader_parameter/outline_color = Vector3(0, 0, 0)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ryguw"]
+resource_local_to_scene = true
+render_priority = 0
+shader = ExtResource("3_s04wv")
+shader_parameter/shader_lerp = 0.0
+shader_parameter/light_mode = 0.0
+shader_parameter/ax = ExtResource("4_me1d0")
+shader_parameter/uv_scale = Vector2(4, 4)
+shader_parameter/albedo = Color(0, 0.7273974, 0.9704087, 1)
+shader_parameter/smstep = 0.5
+shader_parameter/stepv = 0.25
+shader_parameter/max_l = 0.5
+shader_parameter/normal_multiplier = 0.0
+shader_parameter/uv1_scale = Vector3(1, 1, 1)
+shader_parameter/uv1_offset = Vector3(0, 0, 0)
+
+[sub_resource type="SphereMesh" id="SphereMesh_yaehf"]
+material = SubResource("ShaderMaterial_ryguw")
+height = 0.5
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kq58d"]
+radius = 0.55
+height = 2.1
+
+[node name="Abel" type="CharacterBody3D" unique_id=813010946 node_paths=PackedStringArray("soul") groups=["HitBall"]]
+collision_mask = 7
+wall_min_slide_angle = 0.7853982
+floor_block_on_wall = false
+script = ExtResource("1_jcn6o")
+soul = NodePath("")
+
+[node name="Mesh" type="MeshInstance3D" parent="." unique_id=648294260]
+layers = 2
+material_overlay = SubResource("ShaderMaterial_w48qg")
+mesh = SubResource("CapsuleMesh_7dm0k")
+
+[node name="Eyes" type="MeshInstance3D" parent="Mesh" unique_id=1513974982]
+transform = Transform3D(0.68559736, 0, 0, 0, -4.3711385e-08, -0.49026865, 0, 0.99999994, -2.1430322e-08, 0, 0.5, -0.30260384)
+layers = 2
+material_overlay = SubResource("ShaderMaterial_dg77c")
+mesh = SubResource("SphereMesh_yaehf")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1114891130]
+shape = SubResource("CapsuleShape3D_kq58d")
+
+[node name="AudioListener3D" type="AudioListener3D" parent="." unique_id=877579470]
+current = true

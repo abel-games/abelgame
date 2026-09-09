@@ -1,10 +1,8 @@
 [gd_scene format=4 uid="uid://c1akk6jrppmn"]
 
-[ext_resource type="Script" uid="uid://di7mv0uaho6qa" path="res://scripts/abel.gd" id="1_0xm2m"]
 [ext_resource type="Script" uid="uid://q53cld2g3te" path="res://scripts/managers/interact_manager.gd" id="1_2cqfq"]
 [ext_resource type="Script" uid="uid://c3efl2c8wdetj" path="res://scripts/sun.gd" id="1_efxa6"]
 [ext_resource type="Script" uid="uid://ba2j4nortrngd" path="res://scripts/cam.gd" id="1_ig7tw"]
-[ext_resource type="Shader" uid="uid://csgnx46labksa" path="res://shaders/simple_outline.gdshader" id="2_4c57u"]
 [ext_resource type="Script" uid="uid://dngwg4caro78u" path="res://scripts/managers/consolemanager.gd" id="2_getpj"]
 [ext_resource type="Script" uid="uid://gip6leesg8gl" path="res://scripts/aim.gd" id="2_h2yge"]
 [ext_resource type="Shader" uid="uid://blncrr0pljrv2" path="res://shaders/li.gdshader" id="3_efxa6"]
@@ -13,11 +11,10 @@
 [ext_resource type="Texture2D" uid="uid://sk4u0das5ng3" path="res://assets/brickwall.jpg" id="4_4c57u"]
 [ext_resource type="Script" uid="uid://dxppa7g5tgukh" path="res://scripts/managers/routefilemanager.gd" id="4_4k2k6"]
 [ext_resource type="Script" uid="uid://jeinqe42anhp" path="res://scene/cab_executer.gd" id="4_7xrs8"]
-[ext_resource type="Shader" uid="uid://dphseupgowu13" path="res://shaders/other.gdshader" id="4_82xsv"]
 [ext_resource type="Script" uid="uid://ce5oq7pbx60o3" path="res://shaders/classes/version.gd" id="5_kpobt"]
 [ext_resource type="Script" uid="uid://crd113gs834v4" path="res://scripts/inventory.gd" id="7_5vw27"]
 [ext_resource type="PackedScene" uid="uid://tcoelb75l1h4" path="res://scene/item_slot.tscn" id="7_272bh"]
-[ext_resource type="Texture2D" uid="uid://dasoq4xgfndk3" path="res://assets/background_soul.png" id="9_bmc2w"]
+[ext_resource type="PackedScene" uid="uid://by4p80aedllqm" path="res://scene/abel.tscn" id="8_gj7ui"]
 [ext_resource type="Script" uid="uid://ebc8tiphesn0" path="res://scripts/lightorf.gd" id="9_dg77c"]
 [ext_resource type="PackedScene" uid="uid://d2rc35q2vkytm" path="res://scene/player.tscn" id="9_jq2sk"]
 [ext_resource type="Texture2D" uid="uid://djrupg8gsy1t7" path="res://assets/grass.jpg" id="9_ycdy4"]
@@ -54,61 +51,6 @@ glow_enabled = true
 [sub_resource type="Resource" id="Resource_g7b7a"]
 script = ExtResource("5_kpobt")
 metadata/_custom_type_script = "uid://ce5oq7pbx60o3"
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_w48qg"]
-render_priority = 0
-shader = ExtResource("2_4c57u")
-shader_parameter/weight = 0.05
-shader_parameter/outline_color = Vector3(0, 0, 0)
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_82xsv"]
-resource_local_to_scene = true
-render_priority = 0
-shader = ExtResource("4_82xsv")
-shader_parameter/shader_lerp = 0.0
-shader_parameter/light_mode = 0.0
-shader_parameter/ax = ExtResource("9_bmc2w")
-shader_parameter/uv_scale = Vector2(4, 4)
-shader_parameter/albedo = Color(0.90833163, 0, 0, 1)
-shader_parameter/smstep = 0.5
-shader_parameter/stepv = 0.25
-shader_parameter/max_l = 0.5
-shader_parameter/normal_multiplier = 0.0
-shader_parameter/uv1_scale = Vector3(1, 1, 1)
-shader_parameter/uv1_offset = Vector3(0, 0, 0)
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_7dm0k"]
-material = SubResource("ShaderMaterial_82xsv")
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_dg77c"]
-render_priority = 0
-shader = ExtResource("2_4c57u")
-shader_parameter/weight = 0.05
-shader_parameter/outline_color = Vector3(0, 0, 0)
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_ryguw"]
-resource_local_to_scene = true
-render_priority = 0
-shader = ExtResource("4_82xsv")
-shader_parameter/shader_lerp = 0.0
-shader_parameter/light_mode = 0.0
-shader_parameter/ax = ExtResource("9_bmc2w")
-shader_parameter/uv_scale = Vector2(4, 4)
-shader_parameter/albedo = Color(0, 0.7273974, 0.9704087, 1)
-shader_parameter/smstep = 0.5
-shader_parameter/stepv = 0.25
-shader_parameter/max_l = 0.5
-shader_parameter/normal_multiplier = 0.0
-shader_parameter/uv1_scale = Vector3(1, 1, 1)
-shader_parameter/uv1_offset = Vector3(0, 0, 0)
-
-[sub_resource type="SphereMesh" id="SphereMesh_yaehf"]
-material = SubResource("ShaderMaterial_ryguw")
-height = 0.5
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kq58d"]
-radius = 0.55
-height = 2.1
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_g7b7a"]
 friction = 2.0
@@ -273,7 +215,7 @@ border_width_right = 5
 border_width_bottom = 5
 border_color = Color(1, 1, 1, 1)
 
-[node name="World" type="Node" unique_id=682855210]
+[node name="Main" type="Node" unique_id=682855210]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1571131633]
 environment = SubResource("Environment_0rl1p")
@@ -314,30 +256,9 @@ script = ExtResource("1_efxa6")
 
 [node name="World3D" type="Node3D" parent="." unique_id=1249038681]
 
-[node name="Abel" type="CharacterBody3D" parent="World3D" unique_id=887861915 node_paths=PackedStringArray("soul") groups=["HitBall"]]
+[node name="Abel" parent="World3D" unique_id=813010946 node_paths=PackedStringArray("soul") instance=ExtResource("8_gj7ui")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
-collision_mask = 7
-wall_min_slide_angle = 0.7853982
-floor_block_on_wall = false
-script = ExtResource("1_0xm2m")
 soul = NodePath("../Player")
-
-[node name="Mesh" type="MeshInstance3D" parent="World3D/Abel" unique_id=1239756643]
-layers = 2
-material_overlay = SubResource("ShaderMaterial_w48qg")
-mesh = SubResource("CapsuleMesh_7dm0k")
-
-[node name="Eyes" type="MeshInstance3D" parent="World3D/Abel/Mesh" unique_id=1659473178]
-transform = Transform3D(0.68559736, 0, 0, 0, -4.3711385e-08, -0.49026865, 0, 0.99999994, -2.1430322e-08, 0, 0.5, -0.30260384)
-layers = 2
-material_overlay = SubResource("ShaderMaterial_dg77c")
-mesh = SubResource("SphereMesh_yaehf")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Abel" unique_id=801332164]
-shape = SubResource("CapsuleShape3D_kq58d")
-
-[node name="AudioListener3D" type="AudioListener3D" parent="World3D/Abel" unique_id=247457054]
-current = true
 
 [node name="Player" parent="World3D" unique_id=1622680046 node_paths=PackedStringArray("controlled") instance=ExtResource("9_jq2sk")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5428665, 1.6969609, 0)
